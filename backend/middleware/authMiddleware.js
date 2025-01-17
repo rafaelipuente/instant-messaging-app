@@ -6,28 +6,28 @@ const protect = async (req, res, next) => {
 
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         try {
-            // Extract token from header
+            // Extract token
             token = req.headers.authorization.split(' ')[1];
 
-            console.log('Authorization Header:', req.headers.authorization);
-            console.log('Extracted Token:', token); 
+            // Debugging: Log the token
+            console.log('Extracted Token:', token);
 
             // Verify token
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-            // Debugging: Log the decoded token payload
+            // Debugging: Log the decoded payload
             console.log('Decoded Token:', decoded);
 
-            // Attach user to request object
+            // Attach user to the request object
             req.user = await User.findById(decoded.id).select('-password');
 
             next();
         } catch (error) {
-            console.error('Error decoding token:', error.message);
-            return res.status(401).json({ message: 'Not authorized, token failed' });
+            console.error('Error verifying token:', error.message);
+            res.status(401).json({ message: 'Not authorized, token failed' });
         }
     } else {
-        return res.status(401).json({ message: 'Not authorized, no token' });
+        res.status(401).json({ message: 'Not authorized, no token' });
     }
 };
 
