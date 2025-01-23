@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import axiosInstance from '../api/axios';
+
 
 const Register = () => {
     const [formData, setFormData] = useState({
@@ -18,16 +19,17 @@ const Register = () => {
         e.preventDefault();
         setError('');
         setSuccess('');
-
+    
         try {
-            const response = await axios.post('http://localhost:5000/api/users/register', formData);
+            await axiosInstance.post('/users/register', formData);
             setSuccess('Registration successful! Please log in.');
             setFormData({ name: '', email: '', password: '' });
         } catch (err) {
             setError(err.response?.data?.message || 'Something went wrong. Please try again.');
         }
     };
-
+    
+    
     return (
         <div style={{ maxWidth: '400px', margin: 'auto', padding: '20px' }}>
             <h2>Register</h2>

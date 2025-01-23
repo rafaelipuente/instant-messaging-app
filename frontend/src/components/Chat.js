@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:5000'); // Backend WebSocket URL
+const socket = io('http://localhost:3000'); // Backend WebSocket URL
 
 const Chat = () => {
     const [message, setMessage] = useState('');
@@ -9,7 +9,7 @@ const Chat = () => {
     const [room, setRoom] = useState('General');
     const messageEndRef = useRef(null);
 
-    // Function to scroll to the latest message
+    // Scroll to the latest message
     const scrollToBottom = () => {
         if (messageEndRef.current) {
             messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -17,21 +17,32 @@ const Chat = () => {
     };
 
     useEffect(() => {
-        socket.on('message', (data) => {
+        // Join the room
+        socket.emit('joinRoom', room);
+        console.log(`Joining room: ${room}`);
+    
+        // Listen for messages
+        const handleMessage = (data) => {
+            console.log('Message received from server:', data);
             setMessages((prev) => [...prev, data]);
-        });
-
-        return () => {
-            socket.disconnect();
         };
-    }, []);
-
+        socket.on('message', handleMessage);
+    
+        // Cleanup on unmount or room change
+        return () => {
+            console.log(`Leaving room: ${room}`);
+            socket.emit('leaveRoom', room); // Optional: Inform server you're leaving the room
+            socket.off('message', handleMessage); // Remove the listener
+        };
+    }, [room]);
+    
     useEffect(() => {
-        scrollToBottom(); // Call scrollToBottom whenever messages change
+        scrollToBottom(); // Scroll to the latest message when messages update
     }, [messages]);
 
     const sendMessage = () => {
         if (message.trim() === '') return;
+        console.log('Sending message:', message);
         socket.emit('message', {
             room,
             user: 'React User',
@@ -39,6 +50,7 @@ const Chat = () => {
         });
         setMessage('');
     };
+    
 
     const handleKeyPress = (e) => {
         if (e.key === 'Enter') {
@@ -57,7 +69,6 @@ const Chat = () => {
                 <option value="General">General</option>
                 <option value="Sports">Sports</option>
                 <option value="Tech">Tech</option>
-                {/* Add more rooms dynamically here */}
             </select>
             <div
                 style={{
@@ -71,7 +82,7 @@ const Chat = () => {
             >
                 {messages.map((msg, index) => (
                     <p key={index} style={{ margin: '5px 0' }}>
-                        <strong>{msg.user}:</strong> {msg.message}
+                        <strong>{msg.user || 'Anonymous'}:</strong> {msg.message}
                     </p>
                 ))}
                 <div ref={messageEndRef} />
