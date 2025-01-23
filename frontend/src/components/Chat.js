@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:3000'); // Backend WebSocket URL
+const socket = io('http://localhost:5000'); // Backend WebSocket URL
 
 const Chat = () => {
     const [message, setMessage] = useState('');
@@ -9,62 +9,55 @@ const Chat = () => {
     const [room, setRoom] = useState('General');
     const messageEndRef = useRef(null);
 
-    // Scroll to the latest message
-    const scrollToBottom = () => {
-        if (messageEndRef.current) {
-            messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
-        }
-    };
-
     useEffect(() => {
-        // Join the room
+        console.log('Joining room:', room);
         socket.emit('joinRoom', room);
-        console.log(`Joining room: ${room}`);
-    
-        // Listen for messages
-        const handleMessage = (data) => {
-            console.log('Message received from server:', data);
-            setMessages((prev) => [...prev, data]);
-        };
-        socket.on('message', handleMessage);
-    
-        // Cleanup on unmount or room change
+
+        // Listen for new messages
+        socket.on('message', (newMessage) => {
+            console.log('Message received from server:', newMessage);
+            setMessages((prev) => [...prev, newMessage]);
+        });
+
         return () => {
-            console.log(`Leaving room: ${room}`);
-            socket.emit('leaveRoom', room); // Optional: Inform server you're leaving the room
-            socket.off('message', handleMessage); // Remove the listener
+            console.log('Leaving room:', room);
+            socket.emit('leaveRoom', room);
+            socket.off('message'); // Clean up listeners
         };
     }, [room]);
-    
-    useEffect(() => {
-        scrollToBottom(); // Scroll to the latest message when messages update
-    }, [messages]);
 
     const sendMessage = () => {
         if (message.trim() === '') return;
-        console.log('Sending message:', message);
-        socket.emit('message', {
+
+        const newMessage = {
             room,
-            user: 'React User',
+            user: 'User', // Replace with logged-in user data if available
             message,
-        });
+        };
+
+        console.log('Sending message:', newMessage);
+        socket.emit('message', newMessage); // Emit message to backend
         setMessage('');
     };
-    
-
-    const handleKeyPress = (e) => {
-        if (e.key === 'Enter') {
-            sendMessage();
-        }
+/*
+  // code below doesnt work(messes chat up- kept for future implementation)
+    const scrollToBottom = () => {
+        messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
+    useEffect(() => {
+        if (messages.length > 0) {
+            scrollToBottom();
+        }
+    }, [messages]);
+*/
     return (
-        <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto', textAlign: 'center' }}>
+        <div style={{ maxWidth: '600px', margin: 'auto', padding: '20px' }}>
             <h1>Chat Room</h1>
             <select
                 value={room}
                 onChange={(e) => setRoom(e.target.value)}
-                style={{ marginBottom: '10px', padding: '5px' }}
+                style={{ marginBottom: '10px' }}
             >
                 <option value="General">General</option>
                 <option value="Sports">Sports</option>
@@ -75,13 +68,11 @@ const Chat = () => {
                     height: '300px',
                     overflowY: 'auto',
                     border: '1px solid #ccc',
-                    marginBottom: '10px',
                     padding: '10px',
-                    background: '#f9f9f9',
                 }}
             >
                 {messages.map((msg, index) => (
-                    <p key={index} style={{ margin: '5px 0' }}>
+                    <p key={index}>
                         <strong>{msg.user || 'Anonymous'}:</strong> {msg.message}
                     </p>
                 ))}
@@ -91,13 +82,10 @@ const Chat = () => {
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
                 placeholder="Type a message..."
-                style={{ padding: '10px', width: '75%', marginRight: '5px' }}
+                style={{ width: '80%', marginRight: '10px' }}
             />
-            <button onClick={sendMessage} style={{ padding: '10px' }}>
-                Send
-            </button>
+            <button onClick={sendMessage}>Send</button>
         </div>
     );
 };

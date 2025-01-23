@@ -1,35 +1,53 @@
+/* Navbar container */
 .navbar {
-    background-color: #333;
-    padding: 10px 20px;
+    background-color: #333; /* Dark background */
+    color: #fff; /* White text */
+    padding: 10px 20px; /* Add padding around navbar */
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: #fff;
+    justify-content: space-between; /* Space between logo and links */
+    align-items: center; /* Vertically center items */
 }
 
-.navbar h1 {
+/* Logo or brand name styling */
+.navbar h1, .navbar-logo a {
     margin: 0;
     font-size: 1.5em;
+    color: #fff; /* White text for the logo */
+    text-decoration: none; /* Remove underline for the logo */
 }
 
-.navbar ul {
-    list-style: none;
+/* Links container */
+.navbar-links {
     display: flex;
-    gap: 15px;
-    margin: 0;
-    padding: 0;
+    gap: 15px; /* Add spacing between links */
 }
 
-.navbar ul li {
-    font-size: 1em;
+/* Links styling */
+.navbar-links a {
+    color: #fff; /* White text for links */
+    text-decoration: none; /* Remove underline */
+    font-size: 1em; /* Uniform font size */
+    transition: color 0.3s; /* Smooth transition for hover effect */
 }
 
-.navbar ul li a {
-    color: #fff;
-    text-decoration: none;
-    transition: color 0.3s;
+/* Hover effect for links */
+.navbar-links a:hover {
+    color: #1e90ff; /* Change text color on hover */
 }
 
-.navbar ul li a:hover {
-    color: #1e90ff;
+/* Logout button styling */
+.logout-button {
+    background-color: transparent; /* Transparent background */
+    color: #fff; /* White text */
+    border: 1px solid #fff; /* White border */
+    padding: 5px 10px; /* Add padding to button */
+    border-radius: 4px; /* Rounded corners */
+    cursor: pointer; /* Pointer cursor */
+    transition: background-color 0.3s, border-color 0.3s; /* Smooth transitions */
+}
+
+/* Hover effect for logout button */
+.logout-button:hover {
+    background-color: #555; /* Darker background on hover */
+    border-color: #555; /* Change border color on hover */
 }

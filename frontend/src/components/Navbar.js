@@ -1,28 +1,37 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { isTokenValid, logout } from '../utils/auth';
 import '../styles/Navbar.css';
 
+
 const Navbar = () => {
+    const loggedIn = isTokenValid();
+
+    const handleLogout = () => {
+        logout();
+        window.location.href = '/login';
+    };
+
     return (
         <nav className="navbar">
-            <div className="navbar-container">
-                <Link to="/" className="navbar-logo">
-                    MessagingApp
-                </Link>
-                <ul className="navbar-links">
-                    <li>
-                        <Link to="/" className="navbar-item">Home</Link>
-                    </li>
-                    <li>
-                        <Link to="/login" className="navbar-item">Login</Link>
-                    </li>
-                    <li>
-                        <Link to="/register" className="navbar-item">Register</Link>
-                    </li>
-                    <li>
-                        <Link to="/chat" className="navbar-item">Chat</Link>
-                    </li>
-                </ul>
+            <div className="navbar-logo">
+                <Link to="/">MessagingApp</Link>
+            </div>
+            <div className="navbar-links">
+                <Link to="/">Home</Link>
+                {loggedIn ? (
+                    <>
+                        <Link to="/chat">Chat</Link>
+                        <button className="logout-button" onClick={handleLogout}>
+                            Logout
+                        </button>
+                    </>
+                ) : (
+                    <>
+                        <Link to="/login">Login</Link>
+                        <Link to="/register">Register</Link>
+                    </>
+                )}
             </div>
         </nav>
     );

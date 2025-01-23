@@ -1,15 +1,16 @@
 const mongoose = require('mongoose');
 
-// Chat Room Schema
-const chatRoomSchema = mongoose.Schema(
-    {
-        name: { type: String, required: true }, // Chat room name
-        createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // User who created the room
-        participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Array of users in the room
-    },
-    { timestamps: true } // Add createdAt and updatedAt fields
-);
+const chatRoomSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    messages: [
+        {
+            user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            content: { type: String, required: true },
+            timestamp: { type: Date, default: Date.now },
+        },
+    ],
+});
 
-const ChatRoom = mongoose.model('ChatRoom', chatRoomSchema);
-
-module.exports = ChatRoom;
+module.exports = mongoose.model('ChatRoom', chatRoomSchema);

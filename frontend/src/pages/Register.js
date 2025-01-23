@@ -21,14 +21,13 @@ const Register = () => {
         setSuccess('');
     
         try {
-            await axiosInstance.post('/users/register', formData);
+            await axiosInstance.post('/users/register', formData); // No need to assign to `response` if not used
             setSuccess('Registration successful! Please log in.');
             setFormData({ name: '', email: '', password: '' });
         } catch (err) {
             setError(err.response?.data?.message || 'Something went wrong. Please try again.');
         }
     };
-    
     
     return (
         <div style={{ maxWidth: '400px', margin: 'auto', padding: '20px' }}>
