@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import io from 'socket.io-client';
+import { useNavigate } from 'react-router-dom';
 
 const socket = io('http://localhost:5000'); // Backend WebSocket URL
 
@@ -7,8 +8,16 @@ const Chat = () => {
     const [message, setMessage] = useState('');
     const [messages, setMessages] = useState([]);
     const [room, setRoom] = useState('General');
+    const navigate = useNavigate();
 
     useEffect(() => {
+        // Check if user is authenticated
+        const authUser = JSON.parse(localStorage.getItem('authUser'));
+        if (!authUser || !authUser.token) {
+            navigate('/login');
+            return;
+        }
+
         console.log('Joining room:', room);
         socket.emit('joinRoom', room);
 
@@ -24,27 +33,34 @@ const Chat = () => {
             setMessages((prev) => [...prev, newMessage]);
         });
 
+        // Clean up listeners when component unmounts or room changes
         return () => {
             console.log('Leaving room:', room);
             socket.emit('leaveRoom', room);
             socket.off('loadMessages');
-            socket.off('message'); // Clean up listeners
+            socket.off('message');
         };
-    }, [room]);
+    }, [room, navigate]);
 
     const sendMessage = () => {
         if (message.trim() === '') return;
-
+    
+        // Retrieve the logged-in user's name from local storage or another source
+        const user = authUser?.name || 'Anonymous';
+    
         const newMessage = {
             room,
-            user: 'User', // Replace with logged-in user data if available
+            user,
             message,
         };
-
+    
         console.log('Sending message:', newMessage);
         socket.emit('message', newMessage); // Emit message to backend
         setMessage('');
     };
+
+    // Assuming authUser is defined in the scope of this component
+    const authUser = JSON.parse(localStorage.getItem('authUser'));
 
     return (
         <div style={{ maxWidth: '600px', margin: 'auto', padding: '20px' }}>
