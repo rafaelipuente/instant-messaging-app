@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 
 const socket = io('http://localhost:5000'); // Backend WebSocket URL
@@ -7,11 +7,16 @@ const Chat = () => {
     const [message, setMessage] = useState('');
     const [messages, setMessages] = useState([]);
     const [room, setRoom] = useState('General');
-    const messageEndRef = useRef(null);
 
     useEffect(() => {
         console.log('Joining room:', room);
         socket.emit('joinRoom', room);
+
+        // Load previous messages when joining the room
+        socket.on('loadMessages', (loadedMessages) => {
+            console.log('Loaded messages from server:', loadedMessages);
+            setMessages(loadedMessages);
+        });
 
         // Listen for new messages
         socket.on('message', (newMessage) => {
@@ -22,6 +27,7 @@ const Chat = () => {
         return () => {
             console.log('Leaving room:', room);
             socket.emit('leaveRoom', room);
+            socket.off('loadMessages');
             socket.off('message'); // Clean up listeners
         };
     }, [room]);
@@ -39,18 +45,7 @@ const Chat = () => {
         socket.emit('message', newMessage); // Emit message to backend
         setMessage('');
     };
-/*
-  // code below doesnt work(messes chat up- kept for future implementation)
-    const scrollToBottom = () => {
-        messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
 
-    useEffect(() => {
-        if (messages.length > 0) {
-            scrollToBottom();
-        }
-    }, [messages]);
-*/
     return (
         <div style={{ maxWidth: '600px', margin: 'auto', padding: '20px' }}>
             <h1>Chat Room</h1>
@@ -69,23 +64,41 @@ const Chat = () => {
                     overflowY: 'auto',
                     border: '1px solid #ccc',
                     padding: '10px',
+                    backgroundColor: '#f9f9f9',
                 }}
             >
                 {messages.map((msg, index) => (
-                    <p key={index}>
+                    <p key={index} style={{ margin: '5px 0' }}>
                         <strong>{msg.user || 'Anonymous'}:</strong> {msg.message}
                     </p>
                 ))}
-                <div ref={messageEndRef} />
             </div>
             <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Type a message..."
-                style={{ width: '80%', marginRight: '10px' }}
+                style={{
+                    width: '80%',
+                    padding: '10px',
+                    marginRight: '10px',
+                    border: '1px solid #ccc',
+                    borderRadius: '5px',
+                }}
             />
-            <button onClick={sendMessage}>Send</button>
+            <button
+                onClick={sendMessage}
+                style={{
+                    padding: '10px 15px',
+                    backgroundColor: '#1e90ff',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                }}
+            >
+                Send
+            </button>
         </div>
     );
 };
