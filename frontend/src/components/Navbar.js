@@ -1,16 +1,20 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { isTokenValid, logout } from '../utils/auth';
 import '../styles/Navbar.css';
 
-
 const Navbar = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
     const loggedIn = isTokenValid();
 
     const handleLogout = () => {
         logout();
-        window.location.href = '/login';
+        navigate('/login');
     };
+
+    // Check if we're on the chat page
+    const isChatPage = location.pathname === '/chat';
 
     return (
         <nav className="navbar">
@@ -18,18 +22,21 @@ const Navbar = () => {
                 <Link to="/">MessagingApp</Link>
             </div>
             <div className="navbar-links">
-                <Link to="/">Home</Link>
-                {loggedIn ? (
-                    <>
-                        <Link to="/chat">Chat</Link>
-                        <button className="logout-button" onClick={handleLogout}>
-                            Logout
-                        </button>
-                    </>
+                {isChatPage ? (
+                    <button className="logout-button" onClick={handleLogout}>
+                        Logout
+                    </button>
                 ) : (
                     <>
-                        <Link to="/login">Login</Link>
-                        <Link to="/register">Register</Link>
+                        <Link to="/">Home</Link>
+                        {loggedIn ? (
+                            <Link to="/chat">Chat</Link>
+                        ) : (
+                            <>
+                                <Link to="/login">Login</Link>
+                                <Link to="/register">Register</Link>
+                            </>
+                        )}
                     </>
                 )}
             </div>

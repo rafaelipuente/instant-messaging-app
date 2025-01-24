@@ -1,7 +1,8 @@
 import { jwtDecode } from 'jwt-decode';
 
 export const isTokenValid = () => {
-    const token = localStorage.getItem('authToken');
+    const authUser = JSON.parse(localStorage.getItem('authUser'));
+    const token = authUser?.token;
     if (!token) return false;
 
     try {
@@ -15,5 +16,5 @@ export const isTokenValid = () => {
 };
 
 export const logout = () => {
-    localStorage.removeItem('authToken');
+    localStorage.removeItem('authUser');
 };

@@ -8,7 +8,6 @@ import Chat from './Chat';
 import { isTokenValid, logout } from '../utils/auth';
 import '../styles/global.css';
 
-
 const ProtectedRoute = ({ children }) => {
     if (!isTokenValid()) {
         logout();

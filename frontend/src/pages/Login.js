@@ -10,20 +10,22 @@ const Login = () => {
     const [error, setError] = useState('');
     const navigate = useNavigate();
 
+    // Handle form input changes
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleSubmit = async (e) => {
+    // Handle login
+    const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
 
         try {
             const response = await axios.post('http://localhost:5000/api/users/login', formData);
-            const { token } = response.data;
+            const { token, name } = response.data;
 
-            // Save token to localStorage
-            localStorage.setItem('authToken', token);
+            // Save user data (name and token) to localStorage
+            localStorage.setItem('authUser', JSON.stringify({ name, token }));
 
             // Redirect to the chat page
             navigate('/chat');
@@ -36,7 +38,7 @@ const Login = () => {
         <div style={{ maxWidth: '400px', margin: 'auto', padding: '20px' }}>
             <h2>Login</h2>
             {error && <p style={{ color: 'red' }}>{error}</p>}
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleLogin}>
                 <div>
                     <label>Email:</label>
                     <input
