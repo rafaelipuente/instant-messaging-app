@@ -1,44 +1,22 @@
 import React from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { isTokenValid, logout } from '../utils/auth';
-import '../styles/Navbar.css';
+import { useNavigate } from 'react-router-dom';
+import { logout } from '../utils/auth';
 
 const Navbar = () => {
     const navigate = useNavigate();
-    const location = useLocation();
-    const loggedIn = isTokenValid();
 
     const handleLogout = () => {
         logout();
         navigate('/login');
     };
 
-    // Check if we're on the chat page
-    const isChatPage = location.pathname === '/chat';
-
     return (
-        <nav className="navbar">
-            <div className="navbar-logo">
-                <Link to="/">MessagingApp</Link>
-            </div>
-            <div className="navbar-links">
-                {isChatPage ? (
-                    <button className="logout-button" onClick={handleLogout}>
-                        Logout
-                    </button>
-                ) : (
-                    <>
-                        <Link to="/">Home</Link>
-                        {loggedIn ? (
-                            <Link to="/chat">Chat</Link>
-                        ) : (
-                            <>
-                                <Link to="/login">Login</Link>
-                                <Link to="/register">Register</Link>
-                            </>
-                        )}
-                    </>
-                )}
+        <nav className="bg-blue-500 p-4 text-white">
+            <div className="container mx-auto flex justify-between items-center">
+                <h1 className="text-xl font-bold">Instant Messaging App</h1>
+                <button onClick={handleLogout} className="bg-red-500 px-4 py-2 rounded hover:bg-red-600">
+                    Logout
+                </button>
             </div>
         </nav>
     );
