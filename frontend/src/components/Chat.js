@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../utils/auth';
@@ -10,6 +10,11 @@ const Chat = () => {
     const [messages, setMessages] = useState([]);
     const [room, setRoom] = useState('General');
     const navigate = useNavigate();
+    const messagesEndRef = useRef(null);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
 
     useEffect(() => {
         const authUser = JSON.parse(localStorage.getItem('authUser'));
@@ -40,6 +45,10 @@ const Chat = () => {
             socket.off('message');
         };
     }, [room, navigate]);
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
 
     const sendMessage = () => {
         if (message.trim() === '') return;
@@ -93,6 +102,7 @@ const Chat = () => {
                         <strong>{msg.user || 'Anonymous'}:</strong> {msg.message}
                     </p>
                 ))}
+                <div ref={messagesEndRef} />
             </div>
             <div className="chat-input" style={{ display: 'flex' }}>
                 <input
