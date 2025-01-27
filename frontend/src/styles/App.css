@@ -1,47 +1,61 @@
+/* App.css */
+
+/* 1) Basic reset & global defaults */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
 body {
   margin: 0;
+  padding: 0;
+  /* A comfortable default font size */
+  font-size: 16px;
+  /* Use a global font of your choice */
   font-family: Arial, sans-serif;
-  background-color: #1e1e1e;
-  color: #fff;
 }
 
-.app-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
+/* 2) Light background for the entire page */
+body {
+  background-color: #f0f2f5; /* A subtle grey often used in chat UIs */
+  color: #333; /* Default text color; many components can override this */
 }
 
-h1, h2 {
-  text-align: center;
-  margin-top: 20px;
-  color: #1e90ff;
+/* 3) A container for all main content under the navbar */
+.page-wrapper {
+  /* Ensure it fills the screen below the navbar */
+  min-height: calc(100vh - 80px); /* Adjust if your navbar is taller/shorter */
+
+  /* Center content horizontally */
+  display: flex;
+  justify-content: center;
+
+  /* Choose vertical alignment:
+     - 'flex-start' puts content near the top
+     - 'center' perfectly centers both directions */
+  align-items: flex-start;
+
+  /* Spacing below the navbar so content doesn't overlap */
+  padding-top: 40px;
 }
 
-button {
-  background-color: #1e90ff;
+/* (Optional) Utility styles for buttons, etc. */
+
+/* A simple utility class for a primary button style if you need it globally */
+.btn-primary {
+  padding: 10px 20px;
+  background-color: #1e90ff; /* Same as your chat Send button */
   color: #fff;
   border: none;
-  padding: 10px 15px;
-  border-radius: 5px;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 1em;
-  transition: background-color 0.3s;
+  font-size: 15px;
 }
 
-button:hover {
-  background-color: #0066cc;
+.btn-primary:hover {
+  background-color: #0077dd; /* Slightly darker on hover */
 }
 
-input[type="text"], input[type="password"], input[type="email"] {
-  padding: 10px;
-  width: 80%;
-  margin: 10px auto;
-  display: block;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-}
-
-.chat-room {
-  text-align: center;
-  margin-top: 40px;
-}
+/* You can add more global utility classes or remove if not needed */

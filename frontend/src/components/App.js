@@ -6,7 +6,9 @@ import Register from '../pages/Register';
 import Login from '../pages/Login';
 import Chat from './Chat';
 import { isTokenValid, logout } from '../utils/auth';
-import '../styles/global.css';
+//import '../styles/global.css'; // Make sure this includes .page-wrapper styling!
+import '../styles/App.css';
+
 
 /**
  * ProtectedRoute:
@@ -27,7 +29,7 @@ const App = () => {
     const interval = setInterval(() => {
       if (!isTokenValid()) {
         logout();
-        window.location.href = '/login'; 
+        window.location.href = '/login';
       }
     }, 60000); // every 60 seconds
 
@@ -39,25 +41,28 @@ const App = () => {
       {/* Navbar persists across all pages */}
       <Navbar />
 
-      <Routes>
-        {/* Public routes */}
-        <Route path="/" element={<Home />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/login" element={<Login />} />
+      {/* Wrap all routes in a .page-wrapper for a cleaner layout/background */}
+      <div className="page-wrapper">
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={<Home />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<Login />} />
 
-        {/* Protected route: Chat */}
-        <Route
-          path="/chat"
-          element={
-            <ProtectedRoute>
-              <Chat />
-            </ProtectedRoute>
-          }
-        />
+          {/* Protected route: Chat */}
+          <Route
+            path="/chat"
+            element={
+              <ProtectedRoute>
+                <Chat />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* 404 Fallback */}
-        <Route path="*" element={<h1>404 - Page Not Found</h1>} />
-      </Routes>
+          {/* 404 Fallback */}
+          <Route path="*" element={<h1>404 - Page Not Found</h1>} />
+        </Routes>
+      </div>
     </Router>
   );
 };
