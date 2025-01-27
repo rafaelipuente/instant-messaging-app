@@ -8,47 +8,58 @@ import Chat from './Chat';
 import { isTokenValid, logout } from '../utils/auth';
 import '../styles/global.css';
 
+/**
+ * ProtectedRoute:
+ * A wrapper to ensure only authenticated users (valid token) can access certain routes.
+ * If token is invalid/expired, logs out and redirects to /login.
+ */
 const ProtectedRoute = ({ children }) => {
-    if (!isTokenValid()) {
-        logout();
-        return <Navigate to="/login" />;
-    }
-
-    return children;
+  if (!isTokenValid()) {
+    logout();
+    return <Navigate to="/login" />;
+  }
+  return children;
 };
 
 const App = () => {
-    useEffect(() => {
-        const interval = setInterval(() => {
-            if (!isTokenValid()) {
-                logout();
-                window.location.href = '/login'; // Redirect to login on token expiration
-            }
-        }, 60000); // Check every minute
+  // Periodically check token validity; if expired, log out and redirect.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isTokenValid()) {
+        logout();
+        window.location.href = '/login'; 
+      }
+    }, 60000); // every 60 seconds
 
-        return () => clearInterval(interval); // Cleanup on unmount
-    }, []);
+    return () => clearInterval(interval);
+  }, []);
 
-    return (
-        <Router>
-            <Navbar />
-            <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/register" element={<Register />} />
-                <Route path="/login" element={<Login />} />
-                <Route
-                    path="/chat"
-                    element={
-                        <ProtectedRoute>
-                            <Chat />
-                        </ProtectedRoute>
-                    }
-                />
-                {/* 404 Error Page */}
-                <Route path="*" element={<h1>404 - Page Not Found</h1>} />
-            </Routes>
-        </Router>
-    );
+  return (
+    <Router>
+      {/* Navbar persists across all pages */}
+      <Navbar />
+
+      <Routes>
+        {/* Public routes */}
+        <Route path="/" element={<Home />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/login" element={<Login />} />
+
+        {/* Protected route: Chat */}
+        <Route
+          path="/chat"
+          element={
+            <ProtectedRoute>
+              <Chat />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* 404 Fallback */}
+        <Route path="*" element={<h1>404 - Page Not Found</h1>} />
+      </Routes>
+    </Router>
+  );
 };
 
 export default App;
