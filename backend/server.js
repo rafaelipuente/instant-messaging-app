@@ -15,14 +15,17 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: 'http://localhost:3000',
+        origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
         methods: ['GET', 'POST'],
     },
 });
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+}));
 
 // API Routes
 app.use('/api/users', userRoutes);
@@ -30,11 +33,11 @@ app.use('/api/chatrooms', chatRoomRoutes);
 
 // WebSocket Logic
 io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
+    console.log(`User connected with ID: ${socket.id}`);
 
     // Handle room joining and load messages
     socket.on('joinRoom', async (room) => {
-        console.log(`User ${socket.id} joined room: ${room}`);
+        console.log(`User ${socket.id} joining room: ${room}`);
         socket.join(room);
 
         try {
@@ -46,35 +49,48 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle new messages
-    socket.on('message', async (data) => {
-        console.log(`Message received in room ${data.room}:`, data.message);
+// Backend: server.js or chatSocket.js
+socket.on('message', async (data) => {
+    console.log(`Message from ${data.user} in ${data.room}: ${data.message}`);
 
-        try {
-            // Save the message to the database
-            const newMessage = new Message({
-                room: data.room,
-                user: data.user || 'Anonymous', // Use provided user data or default to 'Anonymous'
-                message: data.message,
-            });
-            await newMessage.save();
+    if (!data.room || !data.user || !data.message) {
+        console.error('Invalid message data:', data);
+        return;
+    }
 
-            // Broadcast the message to the room
-            io.to(data.room).emit('message', {
-                user: data.user || 'Anonymous',
-                message: data.message,
-                timestamp: newMessage.timestamp, // Include timestamp
-            });
-            console.log(`Message broadcasted to room: ${data.room}`);
-        } catch (error) {
-            console.error('Error saving message to the database:', error);
-        }
-    });
+    try {
+        // Save the message to the database
+        const newMessage = new Message({
+            room: data.room,
+            user: data.user, // Ensure the user field is being saved
+            message: data.message,
+            timestamp: new Date(),
+        });
+        await newMessage.save();
+
+        // Broadcast the message to the room
+        io.to(data.room).emit('message', {
+            user: data.user, // Include the user in the broadcast
+            message: data.message,
+            timestamp: newMessage.timestamp,
+        });
+        console.log(`Message broadcasted to room: ${data.room}`);
+    } catch (error) {
+        console.error('Error saving message to the database:', error);
+    }
+});
+
 
     // Handle user disconnection
     socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.id}`);
     });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(err.status || 500).json({ message: err.message || 'Internal Server Error' });
 });
 
 const PORT = process.env.PORT || 5000;

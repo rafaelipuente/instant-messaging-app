@@ -1,7 +1,7 @@
 {
-    "extends": ["react-app"],
-    "rules": {
-      "react/react-in-jsx-scope": "off"
-    }
+  "extends": ["react-app"],
+  "rules": {
+      "react/react-in-jsx-scope": "error",
+      "no-unused-expressions": "off" // Disable the rule globally
   }
-  
+}

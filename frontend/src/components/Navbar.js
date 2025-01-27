@@ -1,22 +1,15 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { logout } from '../utils/auth';
+import { Link } from 'react-router-dom';
 
 const Navbar = () => {
-    const navigate = useNavigate();
-
-    const handleLogout = () => {
-        logout();
-        navigate('/login');
-    };
-
     return (
-        <nav className="bg-blue-500 p-4 text-white">
-            <div className="container mx-auto flex justify-between items-center">
-                <h1 className="text-xl font-bold">Instant Messaging App</h1>
-                <button onClick={handleLogout} className="bg-red-500 px-4 py-2 rounded hover:bg-red-600">
-                    Logout
-                </button>
+        <nav className="flex justify-between items-center p-4 bg-gray-800 text-white">
+            <h1 className="text-xl font-bold">Instant Messaging App</h1>
+            <div className="flex gap-4">
+                <Link to="/" className="hover:text-gray-300">Home</Link>
+                <Link to="/register" className="hover:text-gray-300">Register</Link>
+                <Link to="/login" className="hover:text-gray-300">Login</Link>
+                <Link to="/chat" className="hover:text-gray-300">Chat</Link>
             </div>
         </nav>
     );
