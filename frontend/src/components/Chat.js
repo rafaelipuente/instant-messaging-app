@@ -1,64 +1,49 @@
 import React, { useState, useRef, useEffect } from 'react';
 import io from 'socket.io-client';
-import { useNavigate } from 'react-router-dom';
-import { logout } from '../utils/auth';
 
-const socket = io('http://localhost:5000');
+
+
+const socket = io('http://localhost:5000'); // Your backend's WebSocket URL
 
 const Chat = () => {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const [room, setRoom] = useState('General');
-  const navigate = useNavigate();
+
   const messagesEndRef = useRef(null);
   
   const authUser = JSON.parse(localStorage.getItem('authUser'));
 
-  // 1) Join the room and set up listeners
+  // Join the room and set up listeners whenever `room` changes
   useEffect(() => {
-    // Each time 'room' changes, tell the server to join that room
     socket.emit('joinRoom', room);
 
-    // When the server sends old messages for this room
     socket.on('loadMessages', (oldMessages) => {
       setMessages(oldMessages);
-      console.log('Loaded messages:', oldMessages);
     });
 
-    // When a new message is broadcast to this room
     socket.on('message', (data) => {
-      console.log('Received new message:', data);
       setMessages((prev) => [...prev, data]);
     });
 
-    // Cleanup: remove old listeners before re-running effect
     return () => {
       socket.off('loadMessages');
       socket.off('message');
     };
   }, [room]);
 
-  // 2) Send a new message
+  // Send a new message
   const sendMessage = () => {
     if (message.trim() === '') return;
 
     const user = authUser?.name || 'Anonymous';
+    const newMessage = { room, user, message };
 
-    const newMessage = {
-      room,
-      user,
-      message,
-    };
-
-    console.log('Sending message:', newMessage);
     socket.emit('message', newMessage);
     setMessage('');
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+
 
   return (
     <div
@@ -67,50 +52,60 @@ const Chat = () => {
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
-        backgroundColor: '#2c2c2c',
-        color: 'white',
+        backgroundColor: '#1f1f1f',
+        color: '#f5f5f5',
         padding: '20px',
+        boxSizing: 'border-box',
       }}
     >
-      {/* Header */}
-      <div className="chat-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ margin: 0 }}>Chat Room</h1>
-        <button
-          onClick={handleLogout}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'white',
-            cursor: 'pointer',
-            fontSize: '16px',
-          }}
-        >
-          Logout
-        </button>
+      {/* Header Area */}
+      <div 
+        className="chat-header" 
+        style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          marginBottom: '10px',
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: '24px' }}>Chat Room</h1>
+        
       </div>
 
       {/* Room Selector */}
-      <select
-        value={room}
-        onChange={(e) => setRoom(e.target.value)}
-        style={{ marginBottom: '10px', padding: '5px', borderRadius: '5px' }}
-      >
-        <option value="General">General</option>
-        <option value="Sports">Sports</option>
-        <option value="Tech">Tech</option>
-      </select>
+      <div style={{ marginBottom: '10px' }}>
+        <label htmlFor="roomSelect" style={{ marginRight: '8px', fontSize: '16px' }}>
+          Choose a room:
+        </label>
+        <select
+          id="roomSelect"
+          value={room}
+          onChange={(e) => setRoom(e.target.value)}
+          style={{
+            padding: '8px',
+            borderRadius: '4px',
+            border: '1px solid #444',
+            backgroundColor: '#333',
+            color: 'white',
+            fontSize: '16px',
+          }}
+        >
+          <option value="General">General</option>
+          <option value="Sports">Sports</option>
+          <option value="Tech">Tech</option>
+        </select>
+      </div>
 
       {/* Messages Container */}
       <div
         className="chat-messages"
         style={{
-          height: '80vh',
+          flexGrow: 1,
           overflowY: 'auto',
           border: '1px solid #444',
+          backgroundColor: '#2c2c2c',
           padding: '10px',
-          backgroundColor: '#333',
-          flexGrow: 1,
+          borderRadius: '6px',
           marginBottom: '10px',
         }}
       >
@@ -119,7 +114,9 @@ const Chat = () => {
             key={index}
             style={{
               margin: '5px 0',
-              color: msg.user === authUser?.name ? '#1e90ff' : 'white',
+              color: msg.user === authUser?.name ? '#1e90ff' : '#f5f5f5',
+              fontSize: '15px',
+              lineHeight: '1.4',
             }}
           >
             <strong>{msg.user || 'Anonymous'}:</strong> {msg.message}
@@ -129,20 +126,24 @@ const Chat = () => {
       </div>
 
       {/* Input & Send Button */}
-      <div className="chat-input" style={{ display: 'flex' }}>
+      <div 
+        className="chat-input" 
+        style={{ display: 'flex', marginTop: 'auto' }}
+      >
         <input
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Type a message..."
           style={{
-            width: '80%',
+            flex: 1,
             padding: '10px',
-            marginRight: '10px',
             border: '1px solid #444',
-            borderRadius: '5px',
-            backgroundColor: '#444',
+            borderRadius: '4px',
+            backgroundColor: '#333',
             color: 'white',
+            fontSize: '16px',
+            marginRight: '10px',
           }}
         />
         <button
@@ -152,8 +153,9 @@ const Chat = () => {
             backgroundColor: '#1e90ff',
             color: 'white',
             border: 'none',
-            borderRadius: '5px',
+            borderRadius: '4px',
             cursor: 'pointer',
+            fontSize: '16px',
           }}
         >
           Send
