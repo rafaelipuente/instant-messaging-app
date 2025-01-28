@@ -1,71 +1,59 @@
-/* Navbar.css - Shortened, pill-shaped, dorky-flashy theme in blue–purple */
+/* Navbar.css - pill-shaped, gradient style */
 
 .navbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    
-    /* Reduce width to ~70% and center it */
-    width: 70%;
-    margin: 20px auto;  /* top/bottom margin, center horizontally */
-  
-    /* Pill shape and padding */
-    border-radius: 40px;
-    padding: 12px 20px;
-  
-    /* Blue–purple gradient */
-    background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
-  
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
-  
-    /* Comic Sans for comedic flair */
-    font-family: "Comic Sans MS", "Comic Sans", cursive;
-  }
-  
-  .navbar-logo a {
-    color: #fff;
-    text-decoration: none;
-    font-size: 24px;
-    font-weight: bold;
-    text-shadow: 
-      0 0 4px #4b6cb7,
-      0 0 8px #4b6cb7;
-    transition: transform 0.3s ease;
-  }
-  
-  .navbar-logo a:hover {
-    transform: scale(1.1) rotate(-2deg);
-  }
-  
-  .navbar-links {
-    display: flex;
-    gap: 12px;
-  }
-  
-  /* Links and logout button as pill-shaped with a glow on hover */
-  .navbar-links a,
-  .logout-button {
-    position: relative;
-    display: inline-block;
-    text-decoration: none;
-    color: #fff;
-    font-size: 16px;
-    padding: 8px 16px;
-    border: 2px solid #fff;
-    border-radius: 20px;
-    transition: transform 0.2s, box-shadow 0.2s;
-    background: none;
-  }
-  
-  .navbar-links a:hover,
-  .logout-button:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 8px #fff;
-    background-color: rgba(255, 255, 255, 0.2);
-  }
-  
-  .logout-button {
-    cursor: pointer;
-    outline: none;
-  }
-  
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  /* A pill shape with a gradient background */
+  width: 95%; /* Increased width slightly */
+  max-width: 1100px; /* Ensures it doesn't stretch too wide */
+  margin: 16px auto;
+  padding: 12px 30px; /* Increased padding */
+  border-radius: 40px;
+  background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+
+  /* Use a more modern font */
+  font-family: "Arial", sans-serif;
+}
+
+/* Ensure the logo stays properly aligned */
+.navbar-logo a {
+  font-size: 24px;
+  color: #fff;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+/* Right side nav links */
+.navbar-links {
+  display: flex;
+  gap: 14px;
+}
+
+/* Styling for links & logout button */
+.navbar-links a,
+.logout-button {
+  padding: 8px 16px;
+  border: 2px solid #fff;
+  border-radius: 20px;
+  color: #fff;
+  text-decoration: none;
+  background: none;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease-in-out;
+}
+
+/* Hover effect */
+.navbar-links a:hover,
+.logout-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+/* Fixing register button issue - ensuring spacing */
+.navbar-links a:last-child {
+  margin-right: 0;
+}

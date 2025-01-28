@@ -1,77 +1,87 @@
 import React, { useState } from 'react';
-import axiosInstance from '../api/axios';
-
+import { useNavigate } from 'react-router-dom';
+import '../styles/Login.css'; // Reusing the same styles as Login
 
 const Register = () => {
-    const [formData, setFormData] = useState({
-        name: '',
-        email: '',
-        password: '',
-    });
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
 
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setError('');
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setSuccess('');
-    
-        try {
-            await axiosInstance.post('/users/register', formData); // No need to assign to `response` if not used
-            setSuccess('Registration successful! Please log in.');
-            setFormData({ name: '', email: '', password: '' });
-        } catch (err) {
-            setError(err.response?.data?.message || 'Something went wrong. Please try again.');
-        }
-    };
-    
-    return (
-        <div style={{ maxWidth: '400px', margin: 'auto', padding: '20px' }}>
-            <h2>Register</h2>
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-            {success && <p style={{ color: 'green' }}>{success}</p>}
-            <form onSubmit={handleSubmit}>
-                <div>
-                    <label>Name:</label>
-                    <input
-                        type="text"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleChange}
-                        required
-                        style={{ display: 'block', marginBottom: '10px' }}
-                    />
-                </div>
-                <div>
-                    <label>Email:</label>
-                    <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        required
-                        style={{ display: 'block', marginBottom: '10px' }}
-                    />
-                </div>
-                <div>
-                    <label>Password:</label>
-                    <input
-                        type="password"
-                        name="password"
-                        value={formData.password}
-                        onChange={handleChange}
-                        required
-                        style={{ display: 'block', marginBottom: '10px' }}
-                    />
-                </div>
-                <button type="submit">Register</button>
-            </form>
-        </div>
-    );
+    try {
+      // Call the register API endpoint
+      const response = await fetch('http://localhost:5000/api/users/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      if (!response.ok) {
+        // Handle registration error
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to register');
+      }
+
+      // Redirect to login after successful registration
+      alert('Registration successful! Please log in.');
+      navigate('/login');
+    } catch (err) {
+      console.error('Registration error:', err);
+      setError(err.message || 'An error occurred during registration.');
+    }
+  };
+
+  return (
+    <div className="login-container">
+      <div className="login-card">
+        <h2>Register</h2>
+        <form onSubmit={handleRegister}>
+          {error && <p className="error-message">{error}</p>}
+
+          <label>Name:</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter your name"
+            required
+          />
+
+          <label>Email:</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Enter your email"
+            required
+          />
+
+          <label>Password:</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter your password"
+            required
+          />
+
+          <button type="submit" className="btn-submit">
+            Register
+          </button>
+        </form>
+
+        {/* Add link to login */}
+        <p className="redirect-message">
+          Already have an account? <a href="/login">Log in here</a>.
+        </p>
+      </div>
+    </div>
+  );
 };
 
 export default Register;

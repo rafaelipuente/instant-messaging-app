@@ -1,0 +1,94 @@
+/* Login.css */
+
+/* Full page wrapper ensures full viewport height */
+.page-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start; /* Aligns content lower */
+  height: 100vh; /* Full viewport height */
+  padding: 20px;
+  margin-top: 120px; /* Moves it slightly lower */
+}
+
+/* Container for login card */
+.login-container {
+  display: flex;
+  justify-content: center; /* Center horizontally */
+  align-items: center; /* Center vertically */
+  width: 100%;
+}
+
+/* The login card */
+.login-card {
+  background: #2c2c2c;
+  color: #fff;
+  padding: 24px;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 350px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  text-align: left;
+  margin-top: 120px; /* Slightly lower */
+}
+
+/* Heading */
+.login-card h2 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 24px;
+  text-align: center;
+}
+
+/* Labels */
+.login-card label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #ccc;
+}
+
+/* Input fields */
+.login-card input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 12px;
+  border-radius: 4px;
+  border: 1px solid #444;
+  background-color: #333;
+  color: #fff;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+/* Submit button */
+.btn-submit {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  background-color: #1e90ff;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-submit:hover {
+  background-color: #0077dd;
+}
+
+/* Redirect message styling */
+.redirect-message {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 14px;
+  color: #ccc;
+}
+
+.redirect-message a {
+  color: #1e90ff;
+  text-decoration: none;
+}
+
+.redirect-message a:hover {
+  text-decoration: underline;
+}

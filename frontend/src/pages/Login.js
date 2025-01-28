@@ -1,70 +1,75 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import '../styles/Login.css';
 
 const Login = () => {
-    const [formData, setFormData] = useState({
-        email: '',
-        password: '',
-    });
-    const [error, setError] = useState('');
-    const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
 
-    // Handle form input changes
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError(''); // Clear any previous errors
 
-    // Handle login
-    const handleLogin = async (e) => {
-        e.preventDefault();
-        setError('');
+    try {
+      // Call the login API endpoint
+      const response = await fetch('http://localhost:5000/api/users/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-        try {
-            const response = await axios.post('http://localhost:5000/api/users/login', formData);
-            const { token, name } = response.data;
+      if (!response.ok) {
+        // Handle invalid login
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to log in');
+      }
 
-            // Save user data (name and token) to localStorage
-            localStorage.setItem('authUser', JSON.stringify({ name, token }));
+      const data = await response.json();
 
-            // Redirect to the chat page
-            navigate('/chat');
-        } catch (err) {
-            setError(err.response?.data?.message || 'Invalid email or password');
-        }
-    };
+      // Store token in localStorage
+      localStorage.setItem('authUser', JSON.stringify(data));
 
-    return (
-        <div style={{ maxWidth: '400px', margin: 'auto', padding: '20px' }}>
-            <h2>Login</h2>
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-            <form onSubmit={handleLogin}>
-                <div>
-                    <label>Email:</label>
-                    <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        required
-                        style={{ display: 'block', marginBottom: '10px' }}
-                    />
-                </div>
-                <div>
-                    <label>Password:</label>
-                    <input
-                        type="password"
-                        name="password"
-                        value={formData.password}
-                        onChange={handleChange}
-                        required
-                        style={{ display: 'block', marginBottom: '10px' }}
-                    />
-                </div>
-                <button type="submit">Login</button>
-            </form>
-        </div>
-    );
+      // Redirect to the chat page
+      navigate('/chat');
+    } catch (err) {
+      console.error('Login error:', err);
+      setError(err.message || 'An error occurred during login.');
+    }
+  };
+
+  return (
+    <div className="login-container">
+      <div className="login-card">
+        <h2>Login</h2>
+        <form onSubmit={handleLogin}>
+          {error && <p className="error-message">{error}</p>}
+          <label>Email:</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Enter your email"
+            required
+          />
+
+          <label>Password:</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter your password"
+            required
+          />
+
+          <button type="submit" className="btn-submit">
+            Login
+          </button>
+        </form>
+      </div>
+    </div>
+  );
 };
 
 export default Login;
