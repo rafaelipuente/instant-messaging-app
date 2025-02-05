@@ -1,37 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import '../styles/Navbar.css';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [username, setUsername] = useState('');
+  const { authUser, updateAuthUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const checkAuth = () => {
-      const authUser = JSON.parse(localStorage.getItem('authUser'));
-      setIsLoggedIn(!!authUser);
-      setUsername(authUser ? authUser.name : '');
-    };
-
-    checkAuth();
-    window.addEventListener('storage', checkAuth);
-    return () => window.removeEventListener('storage', checkAuth);
-  }, []);
-
   const handleLogout = () => {
     localStorage.removeItem('authUser');
-    setIsLoggedIn(false);
-    setUsername('');
+    updateAuthUser(null);
     navigate('/');
   };
 
   return (
     <nav className="navbar">
       <div className="container">
-        <Link to={isLoggedIn ? '/chat' : '/'} className="navbar-brand">
+        <Link to={authUser ? '/chat' : '/'} className="navbar-brand">
           <span className="brand-icon">💬</span>
           <span className="brand-text">MessagingApp</span>
         </Link>
@@ -45,7 +32,7 @@ const Navbar = () => {
         </button>
 
         <div className={`navbar-links ${isMenuOpen ? 'active' : ''}`}>
-          {isLoggedIn ? (
+          {authUser ? (
             <>
               <Link 
                 to="/chat" 
@@ -61,7 +48,7 @@ const Navbar = () => {
                 onClick={() => setIsMenuOpen(false)}
               >
                 <span className="nav-icon">👤</span>
-                {username || 'Profile'}
+                {authUser.name || 'Profile'}
               </Link>
               <button 
                 onClick={() => {
