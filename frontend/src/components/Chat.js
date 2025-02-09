@@ -13,6 +13,7 @@ const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [socket, setSocket] = useState(null);
   const [typing, setTyping] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
@@ -118,6 +119,14 @@ const Chat = () => {
     }
   };
 
+  const handleUserClick = (clickedUser) => {
+    setSelectedUser(clickedUser);
+  };
+
+  const closeUserModal = () => {
+    setSelectedUser(null);
+  };
+
   return (
     <div className="chat-container">
       <Navbar />
@@ -151,7 +160,13 @@ const Chat = () => {
                 className={`message ${msg.sender.username === user.username ? 'sent' : 'received'}`}
               >
                 <div className="message-header">
-                  <span className="message-sender">{msg.sender.name || msg.sender.username}</span>
+                  <span 
+                    className="message-sender"
+                    onClick={() => handleUserClick(msg.sender)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {msg.sender.name || msg.sender.username}
+                  </span>
                   <span className="message-time">
                     {new Date(msg.timestamp).toLocaleTimeString()}
                   </span>
@@ -181,6 +196,29 @@ const Chat = () => {
           </form>
         </div>
       </div>
+
+      {selectedUser && (
+        <div className="user-modal-overlay" onClick={closeUserModal}>
+          <div className="user-modal" onClick={e => e.stopPropagation()}>
+            <div className="user-modal-header">
+              <h2>{selectedUser.name || selectedUser.username}'s Profile</h2>
+              <button onClick={closeUserModal}>&times;</button>
+            </div>
+            <div className="user-modal-content">
+              <div className="user-info">
+                <div className="user-avatar">
+                  {(selectedUser.name || selectedUser.username).charAt(0).toUpperCase()}
+                </div>
+                <div className="user-details">
+                  <p><strong>Username:</strong> {selectedUser.username}</p>
+                  {selectedUser.name && <p><strong>Name:</strong> {selectedUser.name}</p>}
+                  <p><strong>Status:</strong> Online</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
