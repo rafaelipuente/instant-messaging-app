@@ -1,85 +1,104 @@
-require('dotenv').config();
 const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const dotenv = require('dotenv');
+const mongoose = require('mongoose');
 const cors = require('cors');
-const connectDB = require('./config/db');
+const http = require('http');
+const socketIo = require('socket.io');
 const userRoutes = require('./routes/userRoutes');
-const chatRoomRoutes = require('./routes/chatRoomRoutes');
-const Message = require('./models/messageModel'); // Message model for saving messages
-const profileRoutes = require('./routes/profileRoutes'); 
-
-
-dotenv.config();
-connectDB();
+const messageRoutes = require('./routes/messageRoutes');
+const Message = require('./models/messageModel');
+const User = require('./models/userModel');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-    cors: {
-        origin: 'http://localhost:3000',
-        methods: ['GET', 'POST'],
-    },
+const io = socketIo(server, {
+  cors: {
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"]
+  }
 });
 
 // Middleware
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
 
-// API Routes
+// Debug middleware
+// app.use((req, res, next) => {
+//   console.log(`${req.method} ${req.url}`, req.body);
+//   next();
+// });
+
+// MongoDB connection
+mongoose.connect('mongodb://127.0.0.1:27017/chat-app', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log('✅ MongoDB Connected'))
+.catch(err => console.error('MongoDB connection error:', err));
+
+// Routes
 app.use('/api/users', userRoutes);
-app.use('/api/chatrooms', chatRoomRoutes);
-app.use('/api/users', profileRoutes);
+app.use('/api/messages', messageRoutes);
 
-// WebSocket Logic
-io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
+// Socket.IO connection handling
+io.on('connection', async (socket) => {
+  console.log('New client connected');
 
-    // Handle room joining and load messages
-    socket.on('joinRoom', async (room) => {
-        console.log(`User ${socket.id} joined room: ${room}`);
-        socket.join(room);
+  socket.on('join', async (room) => {
+    socket.join(room);
+    console.log(`User joined room: ${room}`);
 
-        try {
-            // Fetch messages from the database for the room
-            const messages = await Message.find({ room }).sort({ timestamp: 1 });
-            socket.emit('loadMessages', messages); // Send previous messages to the client
-        } catch (error) {
-            console.error('Error loading messages:', error);
-        }
-    });
+    // Send last 50 messages when joining a room
+    try {
+      const messages = await Message.find({ room })
+        .populate('sender', 'username')
+        .sort({ timestamp: -1 })
+        .limit(50);
+      
+      socket.emit('previous-messages', messages.reverse());
+    } catch (error) {
+      console.error('Error fetching previous messages:', error);
+    }
+  });
 
-    // Handle new messages
-    socket.on('message', async (data) => {
-        console.log(`Message received in room ${data.room}:`, data.message);
+  socket.on('message', async (data) => {
+    try {
+      // Find user by username
+      const user = await User.findOne({ username: data.sender });
+      if (!user) {
+        console.error('User not found:', data.sender);
+        return;
+      }
 
-        try {
-            // Save the message to the database
-            const newMessage = new Message({
-                room: data.room,
-                user: data.user || 'Anonymous', // Use provided user data or default to 'Anonymous'
-                message: data.message,
-            });
-            await newMessage.save();
+      // Create and save message
+      const message = new Message({
+        content: data.content,
+        room: data.room,
+        sender: user._id,
+        timestamp: new Date()
+      });
 
-            // Broadcast the message to the room
-            io.to(data.room).emit('message', {
-                user: data.user || 'Anonymous',
-                message: data.message,
-                timestamp: newMessage.timestamp, // Include timestamp
-            });
-            console.log(`Message broadcasted to room: ${data.room}`);
-        } catch (error) {
-            console.error('Error saving message to the database:', error);
-        }
-    });
+      await message.save();
+      await message.populate('sender', 'username');
 
-    // Handle user disconnection
-    socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.id}`);
-    });
+      // Broadcast message to room
+      io.to(data.room).emit('message', {
+        _id: message._id,
+        content: message.content,
+        room: message.room,
+        sender: user.username,
+        timestamp: message.timestamp
+      });
+    } catch (error) {
+      console.error('Error saving message:', error);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected');
+  });
 });
 
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 5001;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

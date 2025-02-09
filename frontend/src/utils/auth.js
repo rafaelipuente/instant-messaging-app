@@ -7,12 +7,21 @@ export const isTokenValid = () => {
 
     try {
         const decoded = jwtDecode(token);
-        const currentTime = Date.now() / 1000; // Current time in seconds
-        return decoded.exp > currentTime; // Token is valid if expiration is in the future
+        const currentTime = Date.now() / 1000;
+        return decoded.exp > currentTime;
     } catch (error) {
         console.error('Invalid token:', error);
         return false;
     }
+};
+
+export const getAuthToken = () => {
+    const authUser = JSON.parse(localStorage.getItem('authUser'));
+    return authUser || null;
+};
+
+export const setAuthToken = (data) => {
+    localStorage.setItem('authUser', JSON.stringify(data));
 };
 
 export const logout = () => {

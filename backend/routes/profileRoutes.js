@@ -1,7 +1,7 @@
 const express = require('express');
 const asyncHandler = require('express-async-handler');
 const User = require('../models/userModel');
-const protect = require('../middleware/authMiddleware');
+const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
@@ -10,17 +10,24 @@ router.put('/profile', protect, asyncHandler(async (req, res) => {
     const user = await User.findById(req.user.id);
 
     if (user) {
-        user.name = req.body.name || user.name;
+        user.username = req.body.username || user.username;
+        user.email = req.body.email || user.email;
+        user.bio = req.body.bio || user.bio;
+        user.avatar = req.body.avatar || user.avatar;
+        
         if (req.body.password) {
             user.password = req.body.password;
         }
+
         const updatedUser = await user.save();
 
         res.json({
             _id: updatedUser._id,
-            name: updatedUser.name,
+            username: updatedUser.username,
             email: updatedUser.email,
-            token: req.user.token, // Reuse the existing token
+            bio: updatedUser.bio,
+            avatar: updatedUser.avatar,
+            token: req.token
         });
     } else {
         res.status(404);

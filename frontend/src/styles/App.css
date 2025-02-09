@@ -14,7 +14,6 @@ html, body {
   font-family: Arial, sans-serif;
 }
 
-
 body {
   background-color: #1f1f1f; 
   color: #f5f5f5; 
@@ -22,11 +21,178 @@ body {
 
 /* .page-wrapper to place main content under the navbar */
 .page-wrapper {
-  
-  
-  min-height: calc(100vh - 80px); /* if your navbar is ~80px tall */
+  margin-top: 3.5rem; /* Match navbar height */
+  min-height: calc(100vh - 3.5rem); /* Subtract navbar height */
   display: flex;
   justify-content: center;
-  align-items: flex-start; /* Or center to vertically center the pages */
-  padding-top: 40px;       /* Space below navbar */
+  align-items: flex-start;
+  padding: 2rem 1rem;
+  width: 100%;
+}
+
+/* Container for page content */
+.container {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding-top: 64px; /* Height of the navbar */
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background-color: #fff;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.profile-button {
+  padding: 8px 16px;
+  background-color: #339af0;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.profile-button:hover {
+  background-color: #228be6;
+}
+
+.logout-button {
+  padding: 8px 16px;
+  background-color: #f1f3f5;
+  color: #495057;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.logout-button:hover {
+  background-color: #e9ecef;
+}
+
+.navbar {
+  background-color: #2c3e50;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  height: 64px;
+}
+
+.nav-brand a {
+  color: white;
+  text-decoration: none;
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.nav-link {
+  color: #ecf0f1;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.nav-link:hover {
+  color: #3498db;
+}
+
+.logout-button {
+  background: none;
+  border: 2px solid #e74c3c;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  color: #e74c3c;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.logout-button:hover {
+  background-color: #e74c3c;
+  color: white;
+}
+
+button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.settings-button {
+  padding: 8px;
+  background-color: #f1f3f5;
+  color: #495057;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settings-button:hover {
+  background-color: #e9ecef;
+  transform: rotate(30deg);
+}
+
+.settings-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 1rem;
+    height: auto;
+  }
+
+  .nav-links {
+    width: 100%;
+    justify-content: space-around;
+  }
+
+  .app {
+    padding-top: 96px; /* Adjusted for taller mobile navbar */
+  }
 }

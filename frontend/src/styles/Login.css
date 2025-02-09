@@ -7,23 +7,24 @@
   align-items: flex-start; /* Aligns content lower */
   height: 100vh; /* Full viewport height */
   padding: 20px;
-  margin-top: 120px; /* Moves it slightly lower */
 }
 
 /* Container for login card */
 .login-container {
-  min-height: 100vh;
+  min-height: calc(100vh - 3.5rem);
+  margin-top: 3.5rem;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: 2rem;
   background: linear-gradient(135deg, var(--background-color) 0%, var(--surface-color) 100%);
-  padding: 1rem;
 }
 
 /* The login card */
 .login-form {
   width: 100%;
-  max-width: 420px;
+  max-width: 480px;
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -58,28 +59,22 @@
 
 .form-group {
   margin-bottom: 1.5rem;
-  position: relative;
 }
 
 .form-group label {
   display: block;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  font-weight: 500;
   margin-bottom: 0.5rem;
-  transition: color 0.3s ease;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .form-group input {
   width: 100%;
-  padding: 0.875rem 1rem;
-  background: rgba(255, 255, 255, 0.95);
+  padding: 0.75rem 1rem;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 12px;
-  font-size: 1rem;
-  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.9);
   transition: all 0.3s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .form-group input:hover {
@@ -90,62 +85,55 @@
 .form-group input:focus {
   outline: none;
   border-color: var(--primary-color);
-  background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(58, 123, 213, 0.1);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
 }
 
 .form-group input::placeholder {
   color: var(--text-muted);
 }
 
-.submit-button {
+.sign-in-button {
   width: 100%;
-  padding: 1rem;
+  padding: 0.75rem;
   background: var(--primary-color);
-  color: #fff;
+  color: white;
   border: none;
   border-radius: 12px;
-  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
   margin-top: 1rem;
 }
 
-.submit-button:hover {
+.sign-in-button:hover {
   background: var(--primary-dark);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(58, 123, 213, 0.2);
 }
 
-.submit-button:active {
+.sign-in-button:active {
   transform: translateY(0);
 }
 
-.submit-button:disabled {
+.sign-in-button:disabled {
   background: var(--text-muted);
   cursor: not-allowed;
   transform: none;
-  box-shadow: none;
 }
 
-.register-link {
+.sign-up-link {
   text-align: center;
   margin-top: 1.5rem;
-  font-size: 0.875rem;
   color: var(--text-secondary);
 }
 
-.register-link a {
+.sign-up-link a {
   color: var(--primary-color);
   text-decoration: none;
   font-weight: 500;
-  margin-left: 0.25rem;
-  transition: color 0.3s ease;
 }
 
-.register-link a:hover {
-  color: var(--primary-dark);
+.sign-up-link a:hover {
+  text-decoration: underline;
 }
 
 .error-message {
