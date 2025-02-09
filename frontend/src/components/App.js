@@ -1,45 +1,26 @@
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Chat from './Chat';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
-import Profile from './Profile'; // Import Profile component
+import Profile from './Profile';
+import Home from '../pages/Home';
+import Navbar from './Navbar';
 import '../styles/App.css';
 
 const App = () => {
-  const { user, logout } = useAuth();
-  const [showProfile, setShowProfile] = useState(false); // Add state for showProfile
-
-  const handleLogout = () => {
-    logout();
-  };
+  const { user } = useAuth();
+  const [showProfile, setShowProfile] = useState(false);
 
   return (
     <Router>
       <div className="app">
-        <nav className="navbar">
-          <div className="nav-brand">
-            <Link to="/">Chat App</Link>
-          </div>
-          <div className="nav-links">
-            {user ? (
-              <>
-                <Link to="/chat" className="nav-link">Chat</Link>
-                <button onClick={handleLogout} className="logout-button">Logout</button>
-              </>
-            ) : (
-              <>
-                <Link to="/login" className="nav-link">Login</Link>
-                <Link to="/register" className="nav-link">Register</Link>
-              </>
-            )}
-          </div>
-        </nav>
-
+        <Navbar />
         <Routes>
           <Route path="/login" element={user ? <Navigate to="/chat" /> : <Login />} />
           <Route path="/register" element={user ? <Navigate to="/chat" /> : <Register />} />
+          <Route path="/home" element={<Home />} />
           <Route
             path="/chat"
             element={
@@ -64,14 +45,13 @@ const App = () => {
               )
             }
           />
-          <Route path="/" element={<Navigate to={user ? "/chat" : "/login"} />} />
+          <Route path="/" element={<Navigate to="/home" />} />
         </Routes>
       </div>
     </Router>
   );
 };
 
-// Add PrivateRoute component
 const PrivateRoute = ({ children }) => {
   return children;
 };

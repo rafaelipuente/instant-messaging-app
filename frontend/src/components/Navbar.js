@@ -5,20 +5,19 @@ import '../styles/Navbar.css';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { authUser, updateAuthUser } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    localStorage.removeItem('authUser');
-    updateAuthUser(null);
+    logout();
     navigate('/');
   };
 
   return (
     <nav className="navbar">
       <div className="container">
-        <Link to={authUser ? '/chat' : '/'} className="navbar-brand">
+        <Link to={user ? '/chat' : '/'} className="navbar-brand">
           <span className="brand-icon">💬</span>
           <span className="brand-text">MessagingApp</span>
         </Link>
@@ -32,7 +31,7 @@ const Navbar = () => {
         </button>
 
         <div className={`navbar-links ${isMenuOpen ? 'active' : ''}`}>
-          {authUser ? (
+          {user ? (
             <>
               <Link 
                 to="/chat" 
@@ -43,12 +42,12 @@ const Navbar = () => {
                 Chat
               </Link>
               <Link 
-                to="/profile" 
-                className={`nav-link ${location.pathname === '/profile' ? 'active' : ''}`}
+                to="/" 
+                className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}
                 onClick={() => setIsMenuOpen(false)}
               >
-                <span className="nav-icon">👤</span>
-                {authUser.name || 'Profile'}
+                <span className="nav-icon">🏠</span>
+                Home
               </Link>
               <button 
                 onClick={() => {

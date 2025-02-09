@@ -14,10 +14,10 @@
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 120px);
+  height: calc(100vh - 200px);
   background-color: #ffffff;
   max-width: 1200px;
-  margin: 20px auto 0;
+  margin: 20px auto 30px;
   position: relative;
   border-radius: 12px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -228,6 +228,16 @@
 
 .chat-messages::-webkit-scrollbar-thumb:hover {
   background: #adb5bd;
+}
+
+/* App Header */
+.app-header {
+  padding: 10px 20px;
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: transparent;
 }
 
 /* Mobile responsive */
