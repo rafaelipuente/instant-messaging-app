@@ -1,171 +1,138 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import Navbar from './Navbar';
 import '../styles/Profile.css';
 
-const Profile = ({ isOpen, onClose }) => {
-  const { user, updateUser } = useAuth();
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    bio: '',
-    twitter: '',
-    github: '',
-    linkedin: ''
-  });
+const Profile = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      setFormData({
-        username: user.username || '',
-        email: user.email || '',
-        bio: user.bio || '',
-        twitter: user.twitter || '',
-        github: user.github || '',
-        linkedin: user.linkedin || ''
-      });
-    }
-  }, [user]);
+  const [formData, setFormData] = useState({
+    name: user?.name || '',
+    username: user?.username || '',
+    status: user?.status || 'online'
+  });
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    try {
-      await fetch(`http://localhost:5001/api/users/${user._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      });
-      
-      updateUser(formData);
-      setIsEditing(false);
-    } catch (error) {
-      console.error('Error updating profile:', error);
-    }
+    // TODO: Implement profile update logic
+    setIsEditing(false);
   };
 
-  if (!isOpen) return null;
+  const handleBackToChat = () => {
+    navigate('/chat');
+  };
 
   return (
-    <div className="profile-modal">
+    <div className="profile-container">
+      <Navbar />
+      
       <div className="profile-content">
-        <button className="close-button" onClick={onClose}>&times;</button>
-        <h2>Profile</h2>
-        
-        <form onSubmit={handleSubmit} className="profile-form">
-          <div className="form-group">
-            <label>Username</label>
-            <input
-              type="text"
-              name="username"
-              value={formData.username}
-              onChange={handleChange}
-              disabled={!isEditing}
-            />
+        <div className="profile-card">
+          <div className="profile-header">
+            <div className="profile-header-left">
+              <div className="profile-avatar">
+                {user?.name?.charAt(0).toUpperCase()}
+              </div>
+              <h1>Profile</h1>
+            </div>
+            <button onClick={handleBackToChat} className="btn-back">
+              Back to Chat
+            </button>
           </div>
 
-          <div className="form-group">
-            <label>Email</label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              disabled={!isEditing}
-            />
-          </div>
+          {isEditing ? (
+            <form onSubmit={handleSubmit} className="profile-form">
+              <div className="form-group">
+                <label>Name</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className="form-input"
+                />
+              </div>
 
-          <div className="form-group">
-            <label>Bio</label>
-            <textarea
-              name="bio"
-              value={formData.bio}
-              onChange={handleChange}
-              disabled={!isEditing}
-              rows="3"
-            />
-          </div>
+              <div className="form-group">
+                <label>Username</label>
+                <input
+                  type="text"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  className="form-input"
+                  disabled
+                />
+                <small>Username cannot be changed</small>
+              </div>
 
-          <div className="form-group">
-            <label>Twitter</label>
-            <input
-              type="url"
-              name="twitter"
-              value={formData.twitter}
-              onChange={handleChange}
-              disabled={!isEditing}
-              placeholder="https://twitter.com/username"
-            />
-          </div>
+              <div className="form-group">
+                <label>Status</label>
+                <select
+                  name="status"
+                  value={formData.status}
+                  onChange={handleChange}
+                  className="form-input"
+                >
+                  <option value="online">Online</option>
+                  <option value="away">Away</option>
+                  <option value="busy">Busy</option>
+                  <option value="offline">Offline</option>
+                </select>
+              </div>
 
-          <div className="form-group">
-            <label>GitHub</label>
-            <input
-              type="url"
-              name="github"
-              value={formData.github}
-              onChange={handleChange}
-              disabled={!isEditing}
-              placeholder="https://github.com/username"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>LinkedIn</label>
-            <input
-              type="url"
-              name="linkedin"
-              value={formData.linkedin}
-              onChange={handleChange}
-              disabled={!isEditing}
-              placeholder="https://linkedin.com/in/username"
-            />
-          </div>
-
-          <div className="profile-actions">
-            {!isEditing ? (
-              <button
-                type="button"
-                className="edit-button"
-                onClick={() => setIsEditing(true)}
-              >
-                Edit Profile
-              </button>
-            ) : (
-              <>
-                <button type="submit" className="save-button">
+              <div className="profile-actions">
+                <button type="submit" className="btn-save">
                   Save Changes
                 </button>
                 <button
                   type="button"
-                  className="cancel-button"
-                  onClick={() => {
-                    setIsEditing(false);
-                    setFormData({
-                      username: user.username || '',
-                      email: user.email || '',
-                      bio: user.bio || '',
-                      twitter: user.twitter || '',
-                      github: user.github || '',
-                      linkedin: user.linkedin || ''
-                    });
-                  }}
+                  className="btn-cancel"
+                  onClick={() => setIsEditing(false)}
                 >
                   Cancel
                 </button>
-              </>
-            )}
-          </div>
-        </form>
+              </div>
+            </form>
+          ) : (
+            <div className="profile-info">
+              <div className="info-group">
+                <label>Name</label>
+                <p>{user?.name}</p>
+              </div>
+
+              <div className="info-group">
+                <label>Username</label>
+                <p>{user?.username}</p>
+              </div>
+
+              <div className="info-group">
+                <label>Status</label>
+                <p className={`status-badge ${user?.status || 'online'}`}>
+                  {user?.status || 'Online'}
+                </p>
+              </div>
+
+              <div className="profile-actions">
+                <button
+                  className="btn-edit"
+                  onClick={() => setIsEditing(true)}
+                >
+                  Edit Profile
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

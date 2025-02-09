@@ -1,11 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-const AuthContext = createContext({
-  user: null,
-  login: () => {},
-  logout: () => {},
-  loading: true
-});
+const AuthContext = createContext(null);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -23,10 +18,13 @@ export const AuthProvider = ({ children }) => {
     try {
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
-        setUser(JSON.parse(storedUser));
+        const userData = JSON.parse(storedUser);
+        console.log('Loaded user from localStorage:', userData.username);
+        setUser(userData);
       }
     } catch (error) {
       console.error('Error loading user from localStorage:', error);
+      localStorage.removeItem('user');
     } finally {
       setLoading(false);
     }
@@ -34,10 +32,17 @@ export const AuthProvider = ({ children }) => {
 
   const login = (userData) => {
     try {
+      if (!userData || !userData._id || !userData.username) {
+        console.error('Invalid user data:', userData);
+        throw new Error('Invalid user data');
+      }
+
+      console.log('Setting user data:', userData);
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
     } catch (error) {
-      console.error('Error saving user to localStorage:', error);
+      console.error('Error in login:', error);
+      throw error;
     }
   };
 
@@ -45,8 +50,11 @@ export const AuthProvider = ({ children }) => {
     try {
       setUser(null);
       localStorage.removeItem('user');
+      console.log('User logged out');
     } catch (error) {
-      console.error('Error removing user from localStorage:', error);
+      console.error('Error in logout:', error);
+      // Ensure user is logged out even if localStorage fails
+      setUser(null);
     }
   };
 

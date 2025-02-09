@@ -1,15 +1,17 @@
 /* Navbar.css - modern design */
 
 .navbar {
+  background: white;
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
-  background-color: var(--background-color);
-  border-bottom: 1px solid var(--border-color);
-  box-shadow: 0 1px 2px var(--shadow-color);
-  height: 3.5rem;
 }
 
 .navbar .container {
@@ -23,17 +25,35 @@
 }
 
 .navbar-brand {
+  display: flex;
+  align-items: center;
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--text-primary);
   text-decoration: none;
-  display: flex;
-  align-items: center;
   gap: 0.5rem;
+}
+
+.navbar-logo {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2c3e50;
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+.navbar-logo:hover {
+  color: #3498db;
 }
 
 .navbar-brand:hover {
   color: var(--primary-color);
+}
+
+.navbar-menu {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
 }
 
 .navbar-links {
@@ -43,7 +63,7 @@
 }
 
 .nav-link {
-  color: var(--text-secondary);
+  color: #2c3e50;
   text-decoration: none;
   font-weight: 500;
   padding: 0.4rem 0.75rem;
@@ -61,21 +81,38 @@
   background-color: var(--surface-color);
 }
 
-.nav-icon {
-  font-size: 1.25rem;
-  color: var(--accent-primary);
-}
-
-.user-profile {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.username {
-  color: var(--text-primary);
+.navbar-link {
+  color: #2c3e50;
+  text-decoration: none;
   font-weight: 500;
-  font-size: 0.9rem;
+  transition: color 0.3s ease;
+}
+
+.navbar-link:hover {
+  color: #3498db;
+}
+
+.navbar-username {
+  color: #7f8c8d;
+  font-weight: 500;
+}
+
+.navbar-button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.navbar-button.logout {
+  background: #e74c3c;
+  color: white;
+}
+
+.navbar-button.logout:hover {
+  background: #c0392b;
 }
 
 .nav-link.logout-button {
@@ -96,6 +133,18 @@
 .nav-link.logout-button:hover {
   color: var(--error-color);
   background-color: var(--surface-color);
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.username {
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 0.9rem;
 }
 
 .user-menu {
@@ -222,6 +271,18 @@
 }
 
 @media (max-width: 768px) {
+  .navbar {
+    padding: 1rem;
+  }
+
+  .navbar-menu {
+    gap: 1rem;
+  }
+
+  .navbar-username {
+    display: none;
+  }
+
   .mobile-menu-button {
     display: block;
   }

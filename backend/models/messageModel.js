@@ -11,10 +11,10 @@ const messageSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  room: {
+  channel: {
     type: String,
     required: true,
-    trim: true
+    enum: ['General', 'Tech Talk', 'Random', 'Music']
   },
   timestamp: {
     type: Date,
@@ -23,6 +23,10 @@ const messageSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Create indexes for efficient querying
+messageSchema.index({ channel: 1, createdAt: -1 });
+messageSchema.index({ sender: 1 });
 
 const Message = mongoose.model('Message', messageSchema);
 

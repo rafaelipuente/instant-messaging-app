@@ -3,108 +3,136 @@ const router = express.Router();
 const User = require('../models/userModel');
 const bcrypt = require('bcryptjs');
 
+// Debug middleware
+router.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
+
 // Register user
 router.post('/register', async (req, res) => {
   try {
-    const { username, name, email, password } = req.body;
-    
-    // Check if user exists
-    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
-    if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+    const { username, password, name } = req.body;
+
+    // Validate input
+    if (!username || !password || !name) {
+      return res.status(400).json({ error: 'All fields are required' });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    // Check username length
+    if (username.length < 3 || username.length > 20) {
+      return res.status(400).json({ error: 'Username must be between 3 and 20 characters' });
+    }
+
+    // Check password length
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // Check if username exists
+    const existingUser = await User.findOne({ username: username.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
 
     // Create new user
     const user = new User({
-      username,
-      name,
-      email,
-      password: hashedPassword
+      username: username.toLowerCase(),
+      password, // Will be hashed by the pre-save middleware
+      name
     });
 
     await user.save();
-    res.status(201).json({ message: 'User created successfully' });
+    console.log('User registered:', username);
+
+    res.status(201).json({ message: 'Registration successful' });
   } catch (error) {
-    res.status(500).json({ message: 'Error creating user' });
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Registration failed' });
   }
 });
 
 // Login user
 router.post('/login', async (req, res) => {
   try {
+    console.log('Login attempt for:', req.body.username);
     const { username, password } = req.body;
-    
+
+    // Validate input
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
     // Find user
-    const user = await User.findOne({ username });
+    const user = await User.findOne({ username: username.toLowerCase() });
+    console.log('User found:', user ? 'Yes' : 'No');
+
     if (!user) {
-      return res.status(400).json({ message: 'User not found' });
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Check password
+    // Check password using bcrypt directly
     const isMatch = await bcrypt.compare(password, user.password);
+    console.log('Password match:', isMatch ? 'Yes' : 'No');
+
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Don't send password in response
+    // Send user data (excluding password)
     const userResponse = {
       _id: user._id,
       username: user.username,
       name: user.name,
-      email: user.email,
-      bio: user.bio,
-      twitter: user.twitter,
-      github: user.github,
-      linkedin: user.linkedin
+      status: 'online'
     };
 
+    console.log('Login successful for:', username);
     res.json(userResponse);
   } catch (error) {
-    res.status(500).json({ message: 'Error logging in' });
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Get user profile
+router.get('/profile/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ error: 'Error getting profile' });
   }
 });
 
 // Update user profile
-router.put('/:id', async (req, res) => {
+router.put('/profile/:id', async (req, res) => {
   try {
-    const { username, name, email, bio, twitter, github, linkedin } = req.body;
-    
-    // Find and update user
+    const { name } = req.body;
     const user = await User.findById(req.params.id);
+
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    // Update fields
-    user.username = username || user.username;
-    user.name = name || user.name;
-    user.email = email || user.email;
-    user.bio = bio || user.bio;
-    user.twitter = twitter || user.twitter;
-    user.github = github || user.github;
-    user.linkedin = linkedin || user.linkedin;
-
+    if (name) user.name = name;
     await user.save();
 
-    // Don't send password in response
     const userResponse = {
       _id: user._id,
       username: user.username,
       name: user.name,
-      email: user.email,
-      bio: user.bio,
-      twitter: user.twitter,
-      github: user.github,
-      linkedin: user.linkedin
+      status: user.status
     };
 
     res.json(userResponse);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating profile' });
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Error updating profile' });
   }
 });
 

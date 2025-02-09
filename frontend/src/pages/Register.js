@@ -1,39 +1,46 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
 import '../styles/Auth.css';
 
 const Register = () => {
   const [formData, setFormData] = useState({
     username: '',
-    name: '',
-    email: '',
-    password: ''
+    password: '',
+    name: ''
   });
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    if (error) setError('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:5001/api/users/register', formData);
-      if (response.data) {
-        login(response.data);
-        navigate('/chat');
+      // Validate input
+      if (!formData.username || !formData.password || !formData.name) {
+        throw new Error('Please fill in all fields');
       }
+
+      const response = await axios.post('http://localhost:5001/api/users/register', formData);
+      console.log('Registration successful');
+      navigate('/login');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to register');
+      console.error('Registration error:', err);
+      setError(err.response?.data?.error || err.message || 'Registration failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -41,7 +48,11 @@ const Register = () => {
     <div className="auth-container">
       <div className="auth-card">
         <h2>Register</h2>
-        {error && <div className="error-message">{error}</div>}
+        {error && (
+          <div className="error-message" role="alert">
+            {error}
+          </div>
+        )}
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <input
@@ -51,6 +62,9 @@ const Register = () => {
               onChange={handleChange}
               placeholder="Username"
               required
+              disabled={isLoading}
+              minLength={3}
+              maxLength={20}
             />
           </div>
           <div className="form-group">
@@ -59,18 +73,9 @@ const Register = () => {
               name="name"
               value={formData.name}
               onChange={handleChange}
-              placeholder="Full Name"
+              placeholder="Name"
               required
-            />
-          </div>
-          <div className="form-group">
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="Email"
-              required
+              disabled={isLoading}
             />
           </div>
           <div className="form-group">
@@ -81,10 +86,21 @@ const Register = () => {
               onChange={handleChange}
               placeholder="Password"
               required
+              disabled={isLoading}
+              minLength={6}
             />
           </div>
-          <button type="submit">Register</button>
+          <button 
+            type="submit" 
+            disabled={isLoading}
+            className="auth-button"
+          >
+            {isLoading ? 'Creating Account...' : 'Register'}
+          </button>
         </form>
+        <p className="auth-switch">
+          Already have an account? <Link to="/login">Login here</Link>
+        </p>
       </div>
     </div>
   );
