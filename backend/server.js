@@ -8,6 +8,7 @@ const userRoutes = require('./routes/userRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const Message = require('./models/messageModel');
 const User = require('./models/userModel');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,6 +25,9 @@ connectDB();
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Request logging middleware
 app.use((req, res, next) => {

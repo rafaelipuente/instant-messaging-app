@@ -207,12 +207,39 @@ const Chat = () => {
             <div className="user-modal-content">
               <div className="user-info">
                 <div className="user-avatar">
-                  {(selectedUser.name || selectedUser.username).charAt(0).toUpperCase()}
+                  {selectedUser.profilePicture ? (
+                    <img 
+                      src={`http://localhost:5001${selectedUser.profilePicture}`}
+                      alt={`${selectedUser.name}'s profile`}
+                      className="user-avatar-image"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedUser.name || selectedUser.username)}&background=random`;
+                      }}
+                    />
+                  ) : (
+                    <div className="user-avatar-initial">
+                      {(selectedUser.name || selectedUser.username).charAt(0).toUpperCase()}
+                    </div>
+                  )}
                 </div>
                 <div className="user-details">
-                  <p><strong>Username:</strong> {selectedUser.username}</p>
-                  {selectedUser.name && <p><strong>Name:</strong> {selectedUser.name}</p>}
-                  <p><strong>Status:</strong> Online</p>
+                  <div className="user-detail">
+                    <span className="detail-label">Username:</span>
+                    <span className="detail-value">@{selectedUser.username}</span>
+                  </div>
+                  <div className="user-detail">
+                    <span className="detail-label">Status:</span>
+                    <span className={`status-badge ${selectedUser.status || 'online'}`}>
+                      {selectedUser.status || 'Online'}
+                    </span>
+                  </div>
+                  {selectedUser.bio && (
+                    <div className="user-detail">
+                      <span className="detail-label">Bio:</span>
+                      <span className="detail-value">{selectedUser.bio}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

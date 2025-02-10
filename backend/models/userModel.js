@@ -24,6 +24,10 @@ const userSchema = new mongoose.Schema({
   status: {
     type: String,
     default: 'online'
+  },
+  profilePicture: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true

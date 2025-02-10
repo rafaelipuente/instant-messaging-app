@@ -32,7 +32,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = (userData) => {
     try {
-      if (!userData || !userData._id || !userData.username) {
+      if (!userData || !userData._id || !userData.username || !userData.token) {
         console.error('Invalid user data:', userData);
         throw new Error('Invalid user data');
       }
@@ -50,11 +50,25 @@ export const AuthProvider = ({ children }) => {
     try {
       setUser(null);
       localStorage.removeItem('user');
-      console.log('User logged out');
     } catch (error) {
       console.error('Error in logout:', error);
-      // Ensure user is logged out even if localStorage fails
-      setUser(null);
+    }
+  };
+
+  const updateUser = (userData) => {
+    try {
+      if (!userData || !userData._id || !userData.username) {
+        console.error('Invalid user data:', userData);
+        throw new Error('Invalid user data');
+      }
+
+      const updatedUserData = { ...userData, token: user?.token };
+      console.log('Updating user data:', updatedUserData);
+      setUser(updatedUserData);
+      localStorage.setItem('user', JSON.stringify(updatedUserData));
+    } catch (error) {
+      console.error('Error in updateUser:', error);
+      throw error;
     }
   };
 
@@ -62,6 +76,7 @@ export const AuthProvider = ({ children }) => {
     user,
     login,
     logout,
+    updateUser,
     loading
   };
 

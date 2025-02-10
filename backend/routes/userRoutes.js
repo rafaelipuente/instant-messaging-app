@@ -2,10 +2,52 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/userModel');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const auth = require('../middleware/auth');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Ensure uploads directory exists
+const uploadDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const filetypes = /jpeg|jpg|png|gif/;
+  const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = filetypes.test(file.mimetype);
+
+  if (extname && mimetype) {
+    return cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed!'));
+  }
+};
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: fileFilter
+});
 
 // Debug middleware
 router.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  console.log('User Route:', req.method, req.url);
   next();
 });
 
@@ -79,12 +121,21 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Send user data (excluding password)
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user._id },
+      'your_jwt_secret', // Use environment variable in production
+      { expiresIn: '24h' }
+    );
+
+    // Send user data (excluding password) and token
     const userResponse = {
       _id: user._id,
       username: user.username,
       name: user.name,
-      status: 'online'
+      status: 'online',
+      profilePicture: user.profilePicture,
+      token
     };
 
     console.log('Login successful for:', username);
@@ -126,7 +177,8 @@ router.put('/profile/:id', async (req, res) => {
       _id: user._id,
       username: user.username,
       name: user.name,
-      status: user.status
+      status: user.status,
+      profilePicture: user.profilePicture
     };
 
     res.json(userResponse);
@@ -134,6 +186,65 @@ router.put('/profile/:id', async (req, res) => {
     console.error('Update profile error:', error);
     res.status(500).json({ error: 'Error updating profile' });
   }
+});
+
+// Upload profile picture
+router.post('/upload-profile-picture', auth, (req, res, next) => {
+  console.log('=== Starting Upload Process ===');
+  console.log('Headers:', req.headers);
+  console.log('Auth user:', req.user);
+  
+  upload.single('profilePicture')(req, res, async function(err) {
+    console.log('=== Multer Processing ===');
+    if (err) {
+      console.error('Multer error:', err);
+      return res.status(400).json({ error: err.message });
+    }
+
+    try {
+      console.log('File from request:', req.file);
+      
+      if (!req.file) {
+        console.error('No file in request');
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      console.log('Looking up user:', req.user.userId);
+      const user = await User.findById(req.user.userId);
+      
+      if (!user) {
+        console.error('User not found:', req.user.userId);
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      console.log('Found user:', user.username);
+
+      // Update user's profile picture path
+      const filePath = req.file.path;
+      const baseDir = path.join(__dirname, '..');
+      console.log('Base directory:', baseDir);
+      console.log('File path:', filePath);
+
+      const relativePath = path.relative(baseDir, filePath);
+      console.log('Relative path:', relativePath);
+
+      user.profilePicture = '/' + relativePath.replace(/\\/g, '/');
+      console.log('Final profile picture path:', user.profilePicture);
+      
+      await user.save();
+      console.log('User updated successfully');
+
+      res.json({ 
+        profilePicture: user.profilePicture,
+        message: 'Profile picture updated successfully' 
+      });
+    } catch (error) {
+      console.error('=== Error Details ===');
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      res.status(500).json({ error: 'Error uploading file: ' + error.message });
+    }
+  });
 });
 
 module.exports = router;
