@@ -51,6 +51,22 @@ router.use((req, res, next) => {
   next();
 });
 
+// Get all users
+router.get('/all-users', auth, async (req, res) => {
+  try {
+    console.log('Fetching all users...');
+    const users = await User.find(
+      { _id: { $ne: req.user._id } }, // Exclude the current user
+      'username name profilePicture'
+    );
+    console.log('Found users:', users.length);
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
 // Register user
 router.post('/register', async (req, res) => {
   try {
@@ -100,46 +116,37 @@ router.post('/login', async (req, res) => {
     console.log('Login attempt for:', req.body.username);
     const { username, password } = req.body;
 
-    // Validate input
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
-    }
-
     // Find user
     const user = await User.findOne({ username: username.toLowerCase() });
-    console.log('User found:', user ? 'Yes' : 'No');
-
     if (!user) {
-      return res.status(401).json({ error: 'Invalid username or password' });
+      return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // Check password using bcrypt directly
+    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
-    console.log('Password match:', isMatch ? 'Yes' : 'No');
-
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid username or password' });
+      return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // Generate JWT token
+    // Create token
     const token = jwt.sign(
-      { userId: user._id },
-      'your_jwt_secret', // Use environment variable in production
+      { _id: user._id, username: user.username },
+      'your_jwt_secret',
       { expiresIn: '24h' }
     );
 
-    // Send user data (excluding password) and token
-    const userResponse = {
-      _id: user._id,
-      username: user.username,
-      name: user.name,
-      status: 'online',
-      profilePicture: user.profilePicture,
-      token
-    };
+    // Send response
+    res.json({
+      token,
+      user: {
+        _id: user._id,
+        username: user.username,
+        name: user.name,
+        profilePicture: user.profilePicture
+      }
+    });
 
     console.log('Login successful for:', username);
-    res.json(userResponse);
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
@@ -147,104 +154,159 @@ router.post('/login', async (req, res) => {
 });
 
 // Get user profile
-router.get('/profile/:id', async (req, res) => {
+router.get('/profile', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    const user = await User.findById(req.user._id).select('-password');
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
     res.json(user);
   } catch (error) {
-    console.error('Get profile error:', error);
-    res.status(500).json({ error: 'Error getting profile' });
-  }
-});
-
-// Update user profile
-router.put('/profile/:id', async (req, res) => {
-  try {
-    const { name } = req.body;
-    const user = await User.findById(req.params.id);
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    if (name) user.name = name;
-    await user.save();
-
-    const userResponse = {
-      _id: user._id,
-      username: user.username,
-      name: user.name,
-      status: user.status,
-      profilePicture: user.profilePicture
-    };
-
-    res.json(userResponse);
-  } catch (error) {
-    console.error('Update profile error:', error);
-    res.status(500).json({ error: 'Error updating profile' });
+    console.error('Error fetching profile:', error);
+    res.status(500).json({ error: 'Error fetching profile' });
   }
 });
 
 // Upload profile picture
-router.post('/upload-profile-picture', auth, (req, res, next) => {
-  console.log('=== Starting Upload Process ===');
-  console.log('Headers:', req.headers);
-  console.log('Auth user:', req.user);
-  
-  upload.single('profilePicture')(req, res, async function(err) {
-    console.log('=== Multer Processing ===');
-    if (err) {
-      console.error('Multer error:', err);
-      return res.status(400).json({ error: err.message });
+router.post('/upload-profile-picture', auth, upload.single('profilePicture'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    try {
-      console.log('File from request:', req.file);
-      
-      if (!req.file) {
-        console.error('No file in request');
-        return res.status(400).json({ error: 'No file uploaded' });
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Delete old profile picture if it exists
+    if (user.profilePicture) {
+      const oldPicturePath = path.join(uploadDir, path.basename(user.profilePicture));
+      if (fs.existsSync(oldPicturePath)) {
+        fs.unlinkSync(oldPicturePath);
       }
+    }
 
-      console.log('Looking up user:', req.user.userId);
-      const user = await User.findById(req.user.userId);
-      
-      if (!user) {
-        console.error('User not found:', req.user.userId);
-        return res.status(404).json({ error: 'User not found' });
-      }
+    // Update user's profile picture path
+    const profilePicturePath = `/uploads/${req.file.filename}`;
+    user.profilePicture = profilePicturePath;
+    await user.save();
 
-      console.log('Found user:', user.username);
+    res.json({ profilePicture: profilePicturePath });
+  } catch (error) {
+    console.error('Error uploading profile picture:', error);
+    res.status(500).json({ error: 'Failed to upload profile picture' });
+  }
+});
 
-      // Update user's profile picture path
-      const filePath = req.file.path;
-      const baseDir = path.join(__dirname, '..');
-      console.log('Base directory:', baseDir);
-      console.log('File path:', filePath);
+// Get all users except current user
+router.get('/list', auth, async (req, res) => {
+  try {
+    const users = await User.find({ _id: { $ne: req.user._id } })
+      .select('username name profilePicture status')
+      .sort('name');
+    res.json(users);
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ error: 'Error getting users' });
+  }
+});
 
-      const relativePath = path.relative(baseDir, filePath);
-      console.log('Relative path:', relativePath);
+// Update user profile
+router.put('/profile', auth, upload.single('profilePicture'), async (req, res) => {
+  try {
+    const { name, username, status } = req.body;
+    const userId = req.user._id;
 
-      user.profilePicture = '/' + relativePath.replace(/\\/g, '/');
-      console.log('Final profile picture path:', user.profilePicture);
-      
-      await user.save();
-      console.log('User updated successfully');
+    // Validate input
+    if (!name && !username && !status && !req.file) {
+      return res.status(400).json({ message: 'No changes provided' });
+    }
 
-      res.json({ 
-        profilePicture: user.profilePicture,
-        message: 'Profile picture updated successfully' 
+    // Check if username is being changed and if it's already taken
+    if (username) {
+      const existingUser = await User.findOne({ 
+        username: username.toLowerCase(),
+        _id: { $ne: userId }
       });
-    } catch (error) {
-      console.error('=== Error Details ===');
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
-      res.status(500).json({ error: 'Error uploading file: ' + error.message });
+      
+      if (existingUser) {
+        return res.status(400).json({ message: 'Username already taken' });
+      }
     }
-  });
+
+    // Get current user
+    const currentUser = await User.findById(userId);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Prepare update object
+    const updateData = {
+      name: name || currentUser.name,
+      username: username ? username.toLowerCase() : currentUser.username,
+      status: status || currentUser.status
+    };
+
+    // Handle profile picture upload
+    if (req.file) {
+      // Delete old profile picture if it exists
+      if (currentUser.profilePicture) {
+        const oldPicturePath = path.join(__dirname, '..', currentUser.profilePicture);
+        if (fs.existsSync(oldPicturePath)) {
+          fs.unlinkSync(oldPicturePath);
+        }
+      }
+
+      updateData.profilePicture = '/uploads/' + req.file.filename;
+    }
+
+    // Update user
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Generate new token
+    const token = jwt.sign(
+      { 
+        _id: updatedUser._id,
+        username: updatedUser.username,
+        profilePicture: updatedUser.profilePicture
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    // Return updated user data with token and full profile picture URL
+    res.json({
+      ...updatedUser.toObject(),
+      profilePicture: updatedUser.profilePicture,
+      token
+    });
+
+  } catch (error) {
+    console.error('Profile update error:', error);
+    res.status(500).json({ message: 'Failed to update profile' });
+  }
+});
+
+// Get user by ID
+router.get('/:userId', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId, '-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching user' });
+  }
 });
 
 module.exports = router;

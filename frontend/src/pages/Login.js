@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE_URL } from '../config';
 import '../styles/Auth.css';
 
 const Login = () => {
@@ -31,15 +32,19 @@ const Login = () => {
     try {
       console.log('Attempting login with:', formData.username);
       
-      const response = await axios.post('http://localhost:5001/api/users/login', {
+      const response = await axios.post(`${API_BASE_URL}/users/login`, {
         username: formData.username.toLowerCase(),
         password: formData.password
       });
 
-      console.log('Login successful:', response.data);
+      console.log('Login response:', response.data);
       
-      if (response.data && response.data._id) {
-        login(response.data);
+      if (response.data && response.data.user && response.data.token) {
+        const userData = {
+          ...response.data.user,
+          token: response.data.token
+        };
+        login(userData);
         navigate('/chat');
       } else {
         throw new Error('Invalid response from server');

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Navbar from './Navbar';
+import DirectMessages from './DirectMessages';
 import io from 'socket.io-client';
+import { SOCKET_URL } from '../config';
 import '../styles/Chat.css';
-
-const SOCKET_SERVER = 'http://localhost:5001';
 
 const Chat = () => {
   const { user } = useAuth();
@@ -14,6 +14,7 @@ const Chat = () => {
   const [socket, setSocket] = useState(null);
   const [typing, setTyping] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [showDMs, setShowDMs] = useState(false);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
@@ -26,29 +27,33 @@ const Chat = () => {
 
   // Initialize socket connection
   useEffect(() => {
-    const newSocket = io(SOCKET_SERVER);
+    const newSocket = io(SOCKET_URL);
+    
+    // Authenticate socket connection
+    if (user && user.token) {
+      newSocket.emit('authenticate', user.token);
+    }
+    
     setSocket(newSocket);
 
     return () => newSocket.close();
-  }, []);
+  }, [user]);
 
   // Join channel and load messages
   useEffect(() => {
     if (socket && user) {
-      // Join the channel
       socket.emit('join', { userId: user._id, channel: activeChannel });
 
-      // Listen for previous messages
       socket.on('previousMessages', (previousMessages) => {
         setMessages(previousMessages);
+        scrollToBottom();
       });
 
-      // Listen for new messages
       socket.on('message', (newMessage) => {
         setMessages(prev => [...prev, newMessage]);
+        scrollToBottom();
       });
 
-      // Listen for typing events
       socket.on('userTyping', ({ username }) => {
         if (username !== user.username) {
           setTyping(username);
@@ -59,7 +64,6 @@ const Chat = () => {
         setTyping(null);
       });
 
-      // Cleanup listeners when changing channels
       return () => {
         socket.off('previousMessages');
         socket.off('message');
@@ -69,53 +73,63 @@ const Chat = () => {
     }
   }, [socket, activeChannel, user]);
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    scrollToBottom();
   }, [messages]);
 
   const handleChannelChange = (channel) => {
     setActiveChannel(channel);
     setMessages([]);
+    setShowDMs(false);
     if (socket) {
       socket.emit('join', { userId: user._id, channel });
     }
   };
 
-  const emitTyping = () => {
-    if (socket) {
-      socket.emit('typing', { channel: activeChannel, username: user.username });
-
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-
-      typingTimeoutRef.current = setTimeout(() => {
-        socket.emit('stopTyping', { channel: activeChannel });
-      }, 1000);
-    }
-  };
-
   const handleMessageChange = (e) => {
     setMessage(e.target.value);
-    emitTyping();
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Emit typing event
+    socket.emit('typing', {
+      channel: activeChannel,
+      username: user.username
+    });
+
+    // Set new timeout
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit('stopTyping', {
+        channel: activeChannel
+      });
+    }, 1000);
   };
 
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!message.trim() || !socket) return;
 
-    // Emit message to server
     socket.emit('message', {
       content: message.trim(),
       channel: activeChannel
     });
 
-    // Clear input and typing status
     setMessage('');
+    
+    // Clear typing timeout and emit stop typing
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
-      socket.emit('stopTyping', { channel: activeChannel });
+      socket.emit('stopTyping', {
+        channel: activeChannel
+      });
     }
   };
 
@@ -130,71 +144,88 @@ const Chat = () => {
   return (
     <div className="chat-container">
       <Navbar />
-      
       <div className="chat-content">
         <div className="channels-sidebar">
-          <h2>Channels</h2>
-          <div className="channel-list">
-            {channels.map(channel => (
-              <button
-                key={channel.id}
-                className={`channel-item ${activeChannel === channel.name ? 'active' : ''}`}
-                onClick={() => handleChannelChange(channel.name)}
-              >
-                <span className="channel-icon">{channel.icon}</span>
-                {channel.name}
-              </button>
-            ))}
+          <h2 className="sidebar-heading">Channels</h2>
+          {channels.map(channel => (
+            <div
+              key={channel.id}
+              className={`channel-item ${activeChannel === channel.name ? 'active' : ''}`}
+              onClick={() => handleChannelChange(channel.name)}
+            >
+              <span className="channel-icon">{channel.icon}</span>
+              <span className="channel-name">{channel.name}</span>
+            </div>
+          ))}
+          <div className="channels-divider"></div>
+          <div 
+            className={`channel-item ${showDMs ? 'active' : ''}`}
+            onClick={() => {
+              setShowDMs(true);
+              setActiveChannel(null);
+            }}
+          >
+            <span className="channel-icon">💬</span>
+            <span className="channel-name">Direct Messages</span>
           </div>
         </div>
 
-        <div className="chat-main">
-          <div className="chat-header">
-            <h2>{activeChannel}</h2>
-          </div>
+        {showDMs ? (
+          <DirectMessages socket={socket} />
+        ) : (
+          <div className="chat-main">
+            <div className="chat-header">
+              <h2>{activeChannel}</h2>
+            </div>
 
-          <div className="messages-container">
-            {messages.map((msg, index) => (
-              <div
-                key={msg._id || index}
-                className={`message ${msg.sender.username === user.username ? 'sent' : 'received'}`}
-              >
-                <div className="message-header">
-                  <span 
-                    className="message-sender"
-                    onClick={() => handleUserClick(msg.sender)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    {msg.sender.name || msg.sender.username}
-                  </span>
-                  <span className="message-time">
-                    {new Date(msg.timestamp).toLocaleTimeString()}
-                  </span>
+            <div className="messages-container">
+              {messages.map((msg, index) => (
+                <div
+                  key={msg._id || index}
+                  className={`message ${msg.sender.username === user.username ? 'sent' : 'received'}`}
+                >
+                  <div className="message-wrapper">
+                    <div className="message-header">
+                      <span 
+                        className="message-sender"
+                        onClick={() => handleUserClick(msg.sender)}
+                      >
+                        {msg.sender.name || msg.sender.username}
+                      </span>
+                      <span className="message-time">
+                        {new Date(msg.timestamp).toLocaleTimeString([], { 
+                          hour: '2-digit', 
+                          minute: '2-digit',
+                          hour12: true 
+                        })}
+                      </span>
+                    </div>
+                    <div className="message-content">{msg.content}</div>
+                  </div>
                 </div>
-                <div className="message-content">{msg.content}</div>
-              </div>
-            ))}
-            {typing && (
-              <div className="typing-indicator">
-                {typing} is typing...
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+              ))}
+              {typing && (
+                <div className="typing-indicator">
+                  {typing} is typing...
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
 
-          <form className="message-input-container" onSubmit={handleSendMessage}>
-            <input
-              type="text"
-              value={message}
-              onChange={handleMessageChange}
-              placeholder={`Message #${activeChannel}`}
-              className="message-input"
-            />
-            <button type="submit" className="send-button">
-              Send
-            </button>
-          </form>
-        </div>
+            <form className="message-input-container" onSubmit={handleSendMessage}>
+              <input
+                type="text"
+                value={message}
+                onChange={handleMessageChange}
+                placeholder="Type a message..."
+                className="message-input"
+              />
+              <button type="submit" className="send-button">
+                Send
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
       {selectedUser && (
@@ -210,7 +241,7 @@ const Chat = () => {
                   {selectedUser.profilePicture ? (
                     <img 
                       src={`http://localhost:5001${selectedUser.profilePicture}`}
-                      alt={`${selectedUser.name}'s profile`}
+                      alt={selectedUser.name}
                       className="user-avatar-image"
                       onError={(e) => {
                         e.target.onerror = null;
@@ -234,12 +265,16 @@ const Chat = () => {
                       {selectedUser.status || 'Online'}
                     </span>
                   </div>
-                  {selectedUser.bio && (
-                    <div className="user-detail">
-                      <span className="detail-label">Bio:</span>
-                      <span className="detail-value">{selectedUser.bio}</span>
-                    </div>
-                  )}
+                  <button 
+                    className="start-dm-button"
+                    onClick={() => {
+                      setShowDMs(true);
+                      setActiveChannel(null);
+                      closeUserModal();
+                    }}
+                  >
+                    Send Direct Message
+                  </button>
                 </div>
               </div>
             </div>
