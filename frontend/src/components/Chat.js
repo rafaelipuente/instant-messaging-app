@@ -7,7 +7,7 @@ import { SOCKET_URL } from '../config';
 import '../styles/Chat.css';
 
 const Chat = () => {
-  const { user } = useAuth();
+  const { user, getFullProfilePictureUrl } = useAuth();
   const [activeChannel, setActiveChannel] = useState('General');
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
@@ -76,6 +76,23 @@ const Chat = () => {
       };
     }
   }, [socket, activeChannel, user]);
+
+  useEffect(() => {
+    if (socket) {
+      socket.on('userUpdated', (updatedUser) => {
+        if (selectedUser?._id === updatedUser._id) {
+          setSelectedUser({
+            ...updatedUser,
+            profilePicture: getFullProfilePictureUrl(updatedUser.profilePicture)
+          });
+        }
+      });
+
+      return () => {
+        socket.off('userUpdated');
+      };
+    }
+  }, [socket, selectedUser, getFullProfilePictureUrl]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

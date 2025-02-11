@@ -4,13 +4,12 @@ import { SOCKET_URL } from '../config';
 import '../styles/DirectMessages.css';
 
 const DirectMessages = ({ socket }) => {
-  const { user } = useAuth();
+  const { user, getFullProfilePictureUrl } = useAuth();
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const messagesEndRef = useRef(null);
-  //const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (!socket || !user) return;
@@ -24,15 +23,41 @@ const DirectMessages = ({ socket }) => {
           throw new Error('Failed to fetch users');
         }
         const data = await response.json();
-        console.log('Users received:', data.length);
-        setUsers(data); // The backend already filtered out the current user
+        const processedData = data.map(u => ({
+          ...u,
+          profilePicture: getFullProfilePictureUrl(u.profilePicture)
+        }));
+        setUsers(processedData);
       } catch (error) {
         console.error('Error fetching users:', error);
       }
     };
 
     fetchUsers();
-  }, [socket, user]);
+
+    socket.on('userUpdated', (updatedUser) => {
+      setUsers(prevUsers => prevUsers.map(u => {
+        if (u._id === updatedUser._id) {
+          return {
+            ...updatedUser,
+            profilePicture: getFullProfilePictureUrl(updatedUser.profilePicture)
+          };
+        }
+        return u;
+      }));
+
+      if (selectedUser?._id === updatedUser._id) {
+        setSelectedUser({
+          ...updatedUser,
+          profilePicture: getFullProfilePictureUrl(updatedUser.profilePicture)
+        });
+      }
+    });
+
+    return () => {
+      socket.off('userUpdated');
+    };
+  }, [socket, user, getFullProfilePictureUrl, selectedUser]);
 
   useEffect(() => {
     if (!socket || !selectedUser) return;
@@ -51,7 +76,7 @@ const DirectMessages = ({ socket }) => {
       socket.off('previousDMs');
       socket.off('newDirectMessage');
     };
-  }, [socket, selectedUser, user]);
+  }, [socket, selectedUser]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -73,12 +98,6 @@ const DirectMessages = ({ socket }) => {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!message.trim() || !selectedUser) return;
-
-    // Another safety check before sending
-    if (selectedUser._id === user._id) {
-      console.warn('Cannot send message to yourself');
-      return;
-    }
 
     try {
       socket.emit('directMessage', {
@@ -103,10 +122,14 @@ const DirectMessages = ({ socket }) => {
             className={`user-item ${selectedUser?._id === u._id ? 'active' : ''}`}
             onClick={() => handleUserSelect(u)}
           >
-            <img src={u.profilePicture || 'default-avatar.png'} alt={u.username} className="user-avatar" />
+            <img 
+              src={u.profilePicture || '/default-avatar.png'} 
+              alt={u.username} 
+              className="user-avatar"
+            />
             <div className="user-info">
               <span className="user-name">{u.username}</span>
-              <span className="user-status">{u.status || 'Online'}</span>
+              <span className="user-status">{u.status || 'offline'}</span>
             </div>
           </div>
         ))}
@@ -118,17 +141,24 @@ const DirectMessages = ({ socket }) => {
             <div className="chat-header">
               <div className="chat-header-info">
                 <h3>Chat with {selectedUser.username}</h3>
-                <span className="user-status">{selectedUser.status || 'Online'}</span>
+                <span className="user-status">{selectedUser.status || 'offline'}</span>
               </div>
             </div>
             <div className="messages-container">
               {messages.map((msg, index) => (
-                <div key={index} className={`message ${msg.sender._id === user._id ? 'sent' : 'received'}`}>
+                <div 
+                  key={msg._id || index} 
+                  className={`message ${msg.sender._id === user._id ? 'sent' : 'received'}`}
+                >
                   <div className="message-content">
-                    <span className="message-text">{msg.content}</span>
-                    <span className="message-time">
-                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    <div className="message-text">{msg.content}</div>
+                    <div className="message-time">
+                      {new Date(msg.timestamp).toLocaleTimeString([], { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: true 
+                      })}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -142,7 +172,9 @@ const DirectMessages = ({ socket }) => {
                 placeholder="Type a message..."
                 className="message-input"
               />
-              <button type="submit" className="send-button">Send</button>
+              <button type="submit" className="send-button">
+                Send
+              </button>
             </form>
           </>
         ) : (

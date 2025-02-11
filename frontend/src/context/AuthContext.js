@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 
 const AuthContext = createContext(null);
 
@@ -10,6 +11,13 @@ export const useAuth = () => {
   return context;
 };
 
+const getFullProfilePictureUrl = (profilePicture) => {
+  if (!profilePicture) return null;
+  return profilePicture.startsWith('http') 
+    ? profilePicture 
+    : `${API_BASE_URL.replace('/api', '')}${profilePicture}`;
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -19,7 +27,9 @@ export const AuthProvider = ({ children }) => {
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         const userData = JSON.parse(storedUser);
-        console.log('Loaded user from localStorage:', userData.username);
+        if (userData.profilePicture) {
+          userData.profilePicture = getFullProfilePictureUrl(userData.profilePicture);
+        }
         setUser(userData);
       }
     } catch (error) {
@@ -37,7 +47,10 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Invalid user data');
       }
 
-      console.log('Setting user data:', userData);
+      if (userData.profilePicture) {
+        userData.profilePicture = getFullProfilePictureUrl(userData.profilePicture);
+      }
+
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
     } catch (error) {
@@ -62,8 +75,11 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Invalid user data');
       }
 
+      if (userData.profilePicture) {
+        userData.profilePicture = getFullProfilePictureUrl(userData.profilePicture);
+      }
+
       const updatedUserData = { ...userData, token: user?.token };
-      console.log('Updating user data:', updatedUserData);
       setUser(updatedUserData);
       localStorage.setItem('user', JSON.stringify(updatedUserData));
     } catch (error) {
@@ -77,7 +93,8 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     updateUser,
-    loading
+    loading,
+    getFullProfilePictureUrl
   };
 
   if (loading) {
