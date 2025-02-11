@@ -5,18 +5,23 @@
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  min-height: calc(100vh - 40px);
+  min-height: calc(100vh - 48px);
   padding: 0;
-  background-color: #1a1d21;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
 }
 
 /* Chat container */
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 40px);
+  height: calc(100vh - 48px);
   width: 100%;
-  background: #1a1d21;
+  max-width: 1200px;
+  margin: 20px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
 }
 
 .chat-content {
@@ -27,18 +32,19 @@
 
 .channels-section {
   width: 240px;
-  background: #2f3136;
-  height: calc(100vh - 40px);
+  background: #f8f9fa;
+  height: calc(100vh - 80px);
   overflow-y: auto;
+  border-right: 1px solid #e9ecef;
 }
 
 .channels-header {
   padding: 16px;
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
-  background: #2f3136;
-  border-bottom: 1px solid #202225;
+  color: #2c3e50;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
   height: 40px;
   display: flex;
   align-items: center;
@@ -48,31 +54,34 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #36393f;
-  height: calc(100vh - 40px);
+  background: white;
 }
 
 .chat-header {
+  padding: 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
   height: 40px;
-  padding: 0 16px;
   display: flex;
   align-items: center;
-  background: #36393f;
-  border-bottom: 1px solid #202225;
+  justify-content: space-between;
 }
 
 .chat-header h2 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
+  color: #2c3e50;
 }
 
 .channels-sidebar {
   width: 260px;
-  background: #1a1d21;
+  background: #f8f9fa;
   padding: 20px;
-  border-right: 1px solid #2d3139;
+  border-right: 1px solid #e9ecef;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -81,7 +90,7 @@
 .sidebar-heading {
   font-size: 16px;
   font-weight: 600;
-  color: #e1e1e1;
+  color: #2c3e50;
   margin-bottom: 12px;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -95,17 +104,18 @@
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
-  color: #8b949e;
+  color: #2c3e50;
 }
 
 .channel-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #e1e1e1;
+  background: #e9ecef;
+  color: #2c3e50;
 }
 
 .channel-item.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  background: #e9ecef;
+  color: #2c3e50;
+  font-weight: 500;
 }
 
 .channel-icon {
@@ -119,7 +129,7 @@
 
 .channels-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.1);
+  background: #e9ecef;
   margin: 12px 0;
 }
 
@@ -127,30 +137,33 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #1a1d21;
+  background: white;
 }
 
 .messages-container {
   flex: 1;
-  padding: 24px;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  background: #1a1d21;
+  padding: 20px;
+  background: white;
 }
 
 .message {
-  display: flex;
-  max-width: 70%;
+  margin-bottom: 16px;
+  padding: 10px 15px;
+  border-radius: 12px;
+  max-width: 80%;
 }
 
 .message.sent {
-  align-self: flex-end;
+  margin-left: auto;
+  background: #0284c7;
+  color: white;
 }
 
 .message.received {
-  align-self: flex-start;
+  margin-right: auto;
+  background: #dcfce7;
+  color: #166534;
 }
 
 .message-wrapper {
@@ -169,18 +182,18 @@
 .message-sender {
   font-size: 13px;
   font-weight: 600;
-  color: #e1e1e1;
+  color: #2c3e50;
   cursor: pointer;
   transition: color 0.2s;
 }
 
 .message-sender:hover {
-  color: #4993e6;
+  color: #0284c7;
 }
 
 .message-time {
   font-size: 12px;
-  color: #8b949e;
+  color: #94a3b8;
 }
 
 .message-content {
@@ -197,7 +210,7 @@
 }
 
 .message.sent .message-content {
-  background: #4993e6;
+  background: #0284c7;
   color: white;
   border-bottom-right-radius: 4px;
   border-top-left-radius: 16px;
@@ -206,8 +219,8 @@
 }
 
 .message.received .message-content {
-  background: #34c759;
-  color: white;
+  background: #dcfce7;
+  color: #166534;
   border-bottom-left-radius: 4px;
   border-top-left-radius: 16px;
   border-top-right-radius: 16px;
@@ -216,44 +229,36 @@
 
 .typing-indicator {
   font-size: 12px;
-  color: #8b949e;
+  color: #94a3b8;
   font-style: italic;
   padding: 4px 12px;
 }
 
 .message-input-container {
   padding: 20px;
-  background: #1a1d21;
-  border-top: 1px solid #2d3139;
-  display: flex;
-  gap: 12px;
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
 }
 
 .message-input {
-  flex: 1;
-  padding: 10px 16px;
-  border: 1px solid #2d3139;
-  border-radius: 20px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
   font-size: 14px;
-  color: #e1e1e1;
-  background: #2d3139;
-  transition: all 0.2s ease;
+  background: white;
+  color: #2c3e50;
 }
 
 .message-input:focus {
   outline: none;
-  border-color: #4993e6;
-  background: #2d3139;
-  box-shadow: 0 0 0 3px rgba(73, 147, 230, 0.1);
-}
-
-.message-input::placeholder {
-  color: #8b949e;
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.1);
 }
 
 .send-button {
   padding: 10px 20px;
-  background: #4993e6;
+  background: #0284c7;
   color: white;
   border: none;
   border-radius: 20px;
@@ -279,26 +284,25 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   z-index: 1000;
 }
 
 .user-modal {
-  background: #1a1d21;
+  background: white;
   border-radius: 12px;
-  width: 400px;
-  max-width: 90vw;
+  width: 90%;
+  max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
 }
 
 .user-modal-header {
   padding: 16px;
-  border-bottom: 1px solid #2d3139;
+  border-bottom: 1px solid #e9ecef;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -308,7 +312,7 @@
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #e1e1e1;
+  color: #2c3e50;
 }
 
 .user-modal-header button {
@@ -316,15 +320,15 @@
   border: none;
   font-size: 24px;
   cursor: pointer;
-  color: #8b949e;
+  color: #94a3b8;
   padding: 4px;
   border-radius: 6px;
   transition: all 0.2s ease;
 }
 
 .user-modal-header button:hover {
-  color: #e1e1e1;
-  background: #2d3139;
+  color: #2c3e50;
+  background: #e9ecef;
 }
 
 .user-modal-content {
@@ -355,7 +359,7 @@
 .user-avatar-initial {
   width: 100%;
   height: 100%;
-  background: #4993e6;
+  background: #0284c7;
   color: white;
   display: flex;
   align-items: center;
@@ -378,13 +382,13 @@
 }
 
 .detail-label {
-  color: #8b949e;
+  color: #94a3b8;
   font-size: 14px;
 }
 
 .detail-value {
   font-weight: 500;
-  color: #e1e1e1;
+  color: #2c3e50;
 }
 
 .status-badge {
@@ -395,12 +399,12 @@
 }
 
 .status-badge.online {
-  background: #238636;
+  background: #22c55e;
   color: white;
 }
 
 .status-badge.offline {
-  background: #6e7681;
+  background: #94a3b8;
   color: white;
 }
 
@@ -408,7 +412,7 @@
   width: 100%;
   padding: 10px;
   margin-top: 16px;
-  background: #4993e6;
+  background: #0284c7;
   color: white;
   border: none;
   border-radius: 6px;
@@ -424,7 +428,13 @@
 }
 
 @media (max-width: 768px) {
-  .channels-sidebar {
+  .chat-container {
+    margin: 0;
+    border-radius: 0;
+    height: 100vh;
+  }
+
+  .channels-section {
     width: 200px;
   }
 }
