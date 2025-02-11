@@ -54,17 +54,9 @@ const DirectMessages = ({ socket }) => {
       }
     });
 
-    return () => {
-      socket.off('userUpdated');
-    };
-  }, [socket, user, getFullProfilePictureUrl, selectedUser]);
-
-  useEffect(() => {
-    if (!socket || !selectedUser) return;
-
     socket.on('previousDMs', (messages) => {
       setMessages(messages);
-      scrollToBottom();
+      setTimeout(scrollToBottom, 0);
     });
 
     socket.on('newDirectMessage', (message) => {
@@ -73,13 +65,20 @@ const DirectMessages = ({ socket }) => {
     });
 
     return () => {
+      socket.off('userUpdated');
       socket.off('previousDMs');
       socket.off('newDirectMessage');
     };
-  }, [socket, selectedUser]);
+  }, [socket, user, getFullProfilePictureUrl, selectedUser]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+    }
   };
 
   const handleUserSelect = (selectedUser) => {
@@ -88,7 +87,12 @@ const DirectMessages = ({ socket }) => {
       return;
     }
     setSelectedUser(selectedUser);
+    setMessages([]); // Clear messages when switching users
     socket.emit('joinDM', { userId: user._id, otherUserId: selectedUser._id });
+  };
+
+  const handleBack = () => {
+    window.location.href = '/chat';
   };
 
   const handleMessageChange = (e) => {
@@ -114,7 +118,12 @@ const DirectMessages = ({ socket }) => {
     <div className="direct-messages">
       <div className="users-list">
         <div className="section-header">
-          <h2>Direct Messages</h2>
+          <button className="back-button" onClick={handleBack}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <h2>Private Messages</h2>
         </div>
         {users.map((u) => (
           <div

@@ -50,12 +50,12 @@ const Chat = () => {
 
       socket.on('previousMessages', (messages) => {
         setMessages(messages);
-        scrollToBottom();
+        // Immediately scroll to bottom when messages are loaded
+        setTimeout(scrollToBottom, 0);
       });
 
       socket.on('message', (message) => {
-        setMessages((prev) => [...prev, message]);
-        scrollToBottom();
+        setMessages((prevMessages) => [...prevMessages, message]);
       });
 
       socket.on('userTyping', ({ username }) => {
@@ -75,7 +75,17 @@ const Chat = () => {
         socket.off('userStopTyping');
       };
     }
-  }, [socket, activeChannel, user]);
+  }, [socket, activeChannel, user._id, user.username]);
+
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   useEffect(() => {
     if (socket) {
@@ -93,14 +103,6 @@ const Chat = () => {
       };
     }
   }, [socket, selectedUser, getFullProfilePictureUrl]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
 
   const handleChannelChange = (channelId) => {
     const channel = channels.find(c => c.id === channelId);
