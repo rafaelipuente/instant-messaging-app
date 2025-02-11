@@ -7,6 +7,8 @@ const auth = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const Message = require('../models/messageModel'); // Assuming Message model is defined in messageModel.js
+const DirectMessage = require('../models/directMessageModel'); // Assuming DirectMessage model is defined in directMessageModel.js
 
 // Load environment variables
 require('dotenv').config();
@@ -73,46 +75,54 @@ router.get('/all-users', auth, async (req, res) => {
   }
 });
 
-// Register user
+// Register a new user
 router.post('/register', async (req, res) => {
   try {
     const { username, password, name } = req.body;
 
     // Validate input
-    if (!username || !password || !name) {
-      return res.status(400).json({ error: 'All fields are required' });
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    // Check username length
-    if (username.length < 3 || username.length > 20) {
-      return res.status(400).json({ error: 'Username must be between 3 and 20 characters' });
-    }
+    // Check if username already exists (case insensitive)
+    const existingUser = await User.findOne({
+      username: { $regex: new RegExp(`^${username}$`, 'i') }
+    });
 
-    // Check password length
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    }
-
-    // Check if username exists
-    const existingUser = await User.findOne({ username: username.toLowerCase() });
     if (existingUser) {
       return res.status(400).json({ error: 'Username already exists' });
     }
 
-    // Create new user
+    // Create new user with consistent username case
     const user = new User({
       username: username.toLowerCase(),
-      password, // Will be hashed by the pre-save middleware
-      name
+      password,
+      name: name || username, // Use username as name if not provided
+      status: 'online'
     });
 
     await user.save();
-    console.log('User registered:', username);
+    
+    // Generate token
+    const token = jwt.sign(
+      { _id: user._id, username: user.username },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
 
-    res.status(201).json({ message: 'Registration successful' });
+    console.log('New user registered:', username);
+    res.status(201).json({ 
+      token, 
+      user: {
+        _id: user._id,
+        username: user.username,
+        name: user.name
+      }
+    });
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+    console.error('Error in user registration:', error);
+    res.status(500).json({ error: 'Error registering user' });
   }
 });
 
@@ -205,16 +215,23 @@ router.post('/upload-profile-picture', auth, upload.single('profilePicture'), as
   }
 });
 
-// Get all users except current user
+// Get list of users for direct messaging
 router.get('/list', auth, async (req, res) => {
   try {
-    const users = await User.find({ _id: { $ne: req.user._id } })
-      .select('username name profilePicture status')
-      .sort('name');
-    res.json(users);
+    const currentUserId = req.user._id.toString(); // Convert to string for comparison
+    console.log('Current user requesting list:', currentUserId);
+
+    // Find all users
+    const users = await User.find({}, 'username name profilePicture status');
+    
+    // Filter out the current user
+    const filteredUsers = users.filter(user => user._id.toString() !== currentUserId);
+    
+    console.log(`Found ${filteredUsers.length} other users`);
+    res.json(filteredUsers);
   } catch (error) {
-    console.error('Get users error:', error);
-    res.status(500).json({ error: 'Error getting users' });
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'Error fetching users' });
   }
 });
 
@@ -304,6 +321,43 @@ router.put('/profile', auth, upload.single('profilePicture'), async (req, res) =
   } catch (error) {
     console.error('Profile update error:', error);
     res.status(500).json({ message: 'Failed to update profile' });
+  }
+});
+
+// Temporary route to delete all data
+router.delete('/delete-all-data', async (req, res) => {
+  try {
+    // Delete all users
+    await User.deleteMany({});
+    
+    // Delete all messages
+    await Message.deleteMany({});
+    
+    // Delete all direct messages
+    await DirectMessage.deleteMany({});
+    
+    // Verify counts
+    const userCount = await User.countDocuments();
+    const messageCount = await Message.countDocuments();
+    const dmCount = await DirectMessage.countDocuments();
+    
+    console.log('All data deleted. Counts:', {
+      users: userCount,
+      messages: messageCount,
+      directMessages: dmCount
+    });
+    
+    res.json({ 
+      message: 'All data deleted',
+      counts: {
+        users: userCount,
+        messages: messageCount,
+        directMessages: dmCount
+      }
+    });
+  } catch (error) {
+    console.error('Error deleting all data:', error);
+    res.status(500).json({ error: 'Failed to delete data' });
   }
 });
 

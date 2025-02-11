@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
 import '../styles/Auth.css';
+
+const SOCKET_URL = 'http://localhost:5001';
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -13,35 +14,46 @@ const Register = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    if (error) setError('');
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
     try {
-      // Validate input
-      if (!formData.username || !formData.password || !formData.name) {
-        throw new Error('Please fill in all fields');
+      const response = await fetch(`${SOCKET_URL}/api/users/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Registration failed');
       }
 
-      const response = await axios.post('http://localhost:5001/api/users/register', formData);
-      console.log('Registration successful');
-      navigate('/login');
-    } catch (err) {
-      console.error('Registration error:', err);
-      setError(err.response?.data?.error || err.message || 'Registration failed');
+      // Store the token and user data
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      
+      // Redirect to chat instead of login
+      navigate('/chat');
+    } catch (error) {
+      setError(error.message);
+      console.error('Registration error:', error);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+    if (error) setError('');
   };
 
   return (
@@ -73,8 +85,7 @@ const Register = () => {
               name="name"
               value={formData.name}
               onChange={handleChange}
-              placeholder="Name"
-              required
+              placeholder="Display Name (optional)"
               disabled={isLoading}
             />
           </div>

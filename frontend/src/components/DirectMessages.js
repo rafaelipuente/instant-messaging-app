@@ -9,20 +9,23 @@ const DirectMessages = ({ socket }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
-  const [typing, setTyping] = useState(null);
   const messagesEndRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
+  //const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
-    if (!socket) return;
-
+    if (!socket || !user) return;
+    
     const fetchUsers = async () => {
       try {
         const response = await fetch(`${SOCKET_URL}/api/users/list`, {
           headers: { 'Authorization': `Bearer ${user.token}` }
         });
+        if (!response.ok) {
+          throw new Error('Failed to fetch users');
+        }
         const data = await response.json();
-        setUsers(data.filter(u => u._id !== user._id));
+        console.log('Users received:', data.length);
+        setUsers(data); // The backend already filtered out the current user
       } catch (error) {
         console.error('Error fetching users:', error);
       }
@@ -34,44 +37,19 @@ const DirectMessages = ({ socket }) => {
   useEffect(() => {
     if (!socket || !selectedUser) return;
 
-    console.log(`Joining DM with ${selectedUser.username}`);
-
-    socket.emit('joinDM', {
-      userId: user._id,
-      otherUserId: selectedUser._id
-    });
-
-    const handlePreviousDMs = (messages) => {
-      console.log("Received previous DMs:", messages);
+    socket.on('previousDMs', (messages) => {
       setMessages(messages);
       scrollToBottom();
-    };
+    });
 
-    const handleNewDM = (message) => {
-      setMessages(prev => [...prev, message]);
+    socket.on('newDirectMessage', (message) => {
+      setMessages((prev) => [...prev, message]);
       scrollToBottom();
-    };
-
-    const handleTyping = ({ username }) => {
-      if (username !== user.username) {
-        setTyping(username);
-      }
-    };
-
-    const handleStopTyping = () => {
-      setTyping(null);
-    };
-
-    socket.on('previousDMs', handlePreviousDMs);
-    socket.on('newDirectMessage', handleNewDM);
-    socket.on('userTyping', handleTyping);
-    socket.on('userStopTyping', handleStopTyping);
+    });
 
     return () => {
-      socket.off('previousDMs', handlePreviousDMs);
-      socket.off('newDirectMessage', handleNewDM);
-      socket.off('userTyping', handleTyping);
-      socket.off('userStopTyping', handleStopTyping);
+      socket.off('previousDMs');
+      socket.off('newDirectMessage');
     };
   }, [socket, selectedUser, user]);
 
@@ -80,108 +58,80 @@ const DirectMessages = ({ socket }) => {
   };
 
   const handleUserSelect = (selectedUser) => {
+    if (selectedUser._id === user._id) {
+      console.warn('Cannot message yourself');
+      return;
+    }
     setSelectedUser(selectedUser);
-    setMessages([]);
+    socket.emit('joinDM', { userId: user._id, otherUserId: selectedUser._id });
   };
 
   const handleMessageChange = (e) => {
     setMessage(e.target.value);
-    if (!socket || !selectedUser) return;
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    socket.emit('typing', {
-      username: user.username,
-      receiverId: selectedUser._id
-    });
-
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('stopTyping', { receiverId: selectedUser._id });
-    }, 1000);
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!message.trim() || !socket || !selectedUser) return;
+    if (!message.trim() || !selectedUser) return;
 
-    const newMessage = {
-      sender: { _id: user._id, username: user.username },
-      content: message.trim(),
-      timestamp: new Date()
-    };
+    // Another safety check before sending
+    if (selectedUser._id === user._id) {
+      console.warn('Cannot send message to yourself');
+      return;
+    }
 
-    setMessages(prev => [...prev, newMessage]);
-    setMessage('');
-
-    socket.emit('directMessage', {
-      content: message.trim(),
-      receiverId: selectedUser._id
-    });
+    try {
+      socket.emit('directMessage', {
+        content: message.trim(),
+        receiverId: selectedUser._id
+      });
+      setMessage('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
   };
 
   return (
     <div className="direct-messages">
       <div className="users-list">
-        <h2>Direct Messages</h2>
-        {users.map(u => (
+        <div className="section-header">
+          <h2>Direct Messages</h2>
+        </div>
+        {users.map((u) => (
           <div
             key={u._id}
             className={`user-item ${selectedUser?._id === u._id ? 'active' : ''}`}
             onClick={() => handleUserSelect(u)}
           >
-            <div className="user-avatar">
-              {u.profilePicture ? (
-                <img
-                  src={u.profilePicture.startsWith('http') 
-                    ? u.profilePicture 
-                    : `${SOCKET_URL}${u.profilePicture}`}
-                  alt={u.name}
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || u.username)}&background=random`;
-                  }}
-                />
-              ) : (
-                <div className="avatar-placeholder">
-                  {(u.name || u.username).charAt(0).toUpperCase()}
-                </div>
-              )}
-            </div>
+            <img src={u.profilePicture || 'default-avatar.png'} alt={u.username} className="user-avatar" />
             <div className="user-info">
-              <div className="user-name">{u.name || u.username}</div>
-              <div className={`user-status ${u.status || 'online'}`}>
-                {u.status || 'Online'}
-              </div>
+              <span className="user-name">{u.username}</span>
+              <span className="user-status">{u.status || 'Online'}</span>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="chat-area">
+      <div className="chat-section">
         {selectedUser ? (
           <>
             <div className="chat-header">
-              <h3>Chat with {selectedUser.name || selectedUser.username}</h3>
+              <div className="chat-header-info">
+                <h3>Chat with {selectedUser.username}</h3>
+                <span className="user-status">{selectedUser.status || 'Online'}</span>
+              </div>
             </div>
             <div className="messages-container">
               {messages.map((msg, index) => (
-                <div
-                  key={msg._id || index}
-                  className={`message ${msg.sender._id === user._id ? 'sent' : 'received'}`}
-                >
-                  <div className="message-content">{msg.content}</div>
-                  <div className="message-time">
-                    {new Date(msg.timestamp).toLocaleTimeString()}
+                <div key={index} className={`message ${msg.sender._id === user._id ? 'sent' : 'received'}`}>
+                  <div className="message-content">
+                    <span className="message-text">{msg.content}</span>
+                    <span className="message-time">
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
                 </div>
               ))}
-              {typing && (
-                <div className="typing-indicator">
-                  {typing} is typing...
-                </div>
-              )}
               <div ref={messagesEndRef} />
             </div>
             <form className="message-input-container" onSubmit={handleSendMessage}>
@@ -192,14 +142,13 @@ const DirectMessages = ({ socket }) => {
                 placeholder="Type a message..."
                 className="message-input"
               />
-              <button type="submit" className="send-button">
-                Send
-              </button>
+              <button type="submit" className="send-button">Send</button>
             </form>
           </>
         ) : (
           <div className="no-chat-selected">
-            Select a user to start chatting
+            <h3>Welcome to Direct Messages</h3>
+            <p>Select a user to start chatting</p>
           </div>
         )}
       </div>

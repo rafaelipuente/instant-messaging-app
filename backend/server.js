@@ -1,24 +1,21 @@
-/*****************************************************
- * server.js
- *****************************************************/
 require('dotenv').config();
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 
-// 1. CONNECT TO MONGODB
+// Connect to MongoDB
 const connectDB = require('./config/db');
 connectDB();
 
-// 2. IMPORT EXPRESS APP (FROM app.js)
+// Import Express app
 const app = require('./app');
 
-// 3. IMPORT MODELS FOR SOCKET LOGIC (Optional but needed for your chat events)
+// Import Models
 const User = require('./models/userModel');
 const Message = require('./models/messageModel');
 const DirectMessage = require('./models/directMessageModel');
 
-// 4. CREATE HTTP SERVER & ATTACH SOCKET.IO
+// Create HTTP Server & Attach Socket.io
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -28,7 +25,7 @@ const io = new Server(server, {
   },
 });
 
-// 5. SOCKET.IO AUTH MIDDLEWARE
+// Socket.io Auth Middleware
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
 
 io.use((socket, next) => {
@@ -46,7 +43,7 @@ io.use((socket, next) => {
   }
 });
 
-// 6. SOCKET.IO EVENT HANDLERS
+// Socket.io Event Handlers
 io.on('connection', (socket) => {
   console.log('User connected:', socket.username);
 
@@ -56,78 +53,43 @@ io.on('connection', (socket) => {
   socket.on('join', async ({ userId, channel }) => {
     try {
       const user = await User.findById(socket.userId);
-      if (!user) {
-        console.error(`No user found for ID: ${socket.userId}. Join aborted.`);
-        return;
-      }
+      if (!user) return;
 
-      // Leave previous rooms except your own socket.id
-      Object.keys(socket.rooms).forEach((room) => {
-        if (room !== socket.id) {
-          socket.leave(room);
-        }
-      });
-
-      // Join the new channel
+      socket.leaveAll(); // Leave all previous rooms
       socket.join(channel);
       console.log(`User ${socket.username} joined channel: ${channel}`);
 
-      // Fetch last 50 messages, oldest first
+      // Fetch last 50 messages
       const messages = await Message.find({ channel })
         .sort({ timestamp: -1 })
         .limit(50)
-        .populate('sender', 'username name profilePicture status')
-        .sort({ timestamp: 1 });
-
-      // Send previous messages
-      socket.emit('previousMessages', messages);
+        .populate('sender', 'username name profilePicture status');
+      
+      socket.emit('previousMessages', messages.reverse());
     } catch (error) {
       console.error('Error in join:', error);
     }
   });
 
   /**
-   * SEND A MESSAGE IN CHANNEL
+   * SEND A MESSAGE IN A CHANNEL
    */
-  socket.on('message', async (data) => {
+  socket.on('message', async ({ content, channel }) => {
     try {
-      const user = await User.findById(socket.userId);
-      if (!user) {
-        console.error(`No user found for ID: ${socket.userId}. Cannot send message.`);
-        return;
-      }
-
-      // Create and save message
-      const newMessage = new Message({
-        content: data.content,
+      const newMessage = await Message.create({
+        content,
         sender: socket.userId,
-        channel: data.channel,
+        channel,
         timestamp: new Date(),
       });
-      await newMessage.save();
-
-      // Populate sender details for broadcast
+      
       const populatedMessage = await Message.findById(newMessage._id)
         .populate('sender', 'username name profilePicture status');
-
-      // Broadcast to everyone in the channel
-      io.to(data.channel).emit('message', populatedMessage);
+      
+      io.to(channel).emit('message', populatedMessage);
     } catch (error) {
       console.error('Error saving message:', error);
     }
-  });
-
-  /**
-   * TYPING INDICATORS
-   */
-  socket.on('typing', (data) => {
-    socket.to(data.channel).emit('userTyping', {
-      username: data.username,
-    });
-  });
-
-  socket.on('stopTyping', (data) => {
-    socket.to(data.channel).emit('userStopTyping');
   });
 
   /**
@@ -135,33 +97,31 @@ io.on('connection', (socket) => {
    */
   socket.on('joinDM', async ({ userId, otherUserId }) => {
     try {
-      const user = await User.findById(socket.userId);
-      if (!user) {
-        console.error(`No user found for ID: ${socket.userId}. joinDM aborted.`);
+      // Prevent joining self-chat room
+      if (userId === otherUserId) {
+        console.warn('Blocked attempt to join self-chat room:', userId);
         return;
       }
 
-      // Create a unique room for these two users
       const roomId = [userId, otherUserId].sort().join('-');
       socket.join(roomId);
+      console.log(`User ${userId} joined DM room ${roomId}`);
 
-      // Fetch last 50 direct messages
+      // Fetch existing messages
       const messages = await DirectMessage.find({
         $or: [
           { sender: userId, receiver: otherUserId },
-          { sender: otherUserId, receiver: userId },
-        ],
+          { sender: otherUserId, receiver: userId }
+        ]
       })
-        .sort({ timestamp: -1 })
-        .limit(50)
-        .populate('sender', 'username name profilePicture status')
-        .populate('receiver', 'username name profilePicture status')
-        .sort({ timestamp: 1 });
+      .sort({ timestamp: 1 })
+      .populate('sender', 'username name profilePicture status')
+      .populate('receiver', 'username name profilePicture status');
 
-      // Send previous DMs
       socket.emit('previousDMs', messages);
     } catch (error) {
-      console.error('Error fetching DMs:', error);
+      console.error('Error in joinDM:', error);
+      socket.emit('error', { message: 'Failed to join DM room' });
     }
   });
 
@@ -170,31 +130,31 @@ io.on('connection', (socket) => {
    */
   socket.on('directMessage', async ({ content, receiverId }) => {
     try {
-      const user = await User.findById(socket.userId);
-      if (!user) {
-        console.error(`No user found for ID: ${socket.userId}. Cannot send DM.`);
+      // Prevent self-messaging
+      if (socket.userId === receiverId) {
+        console.warn('Blocked attempt to self-message:', socket.userId);
         return;
       }
 
-      // Create and save the DM
-      const message = new DirectMessage({
+      const newMessage = await DirectMessage.create({
         content,
         sender: socket.userId,
         receiver: receiverId,
-        timestamp: new Date(),
+        timestamp: new Date()
       });
-      await message.save();
 
-      // Populate sender/receiver
-      const populatedMessage = await DirectMessage.findById(message._id)
+      const populatedMessage = await DirectMessage.findById(newMessage._id)
         .populate('sender', 'username name profilePicture status')
         .populate('receiver', 'username name profilePicture status');
 
-      // Emit to both participants
+      // Create unique room ID for the conversation
       const roomId = [socket.userId, receiverId].sort().join('-');
       io.to(roomId).emit('newDirectMessage', populatedMessage);
+
+      console.log('Direct message saved:', populatedMessage._id);
     } catch (error) {
-      console.error('Error saving direct message:', error);
+      console.error('Error in directMessage:', error);
+      socket.emit('messageError', { error: 'Failed to send message' });
     }
   });
 
@@ -206,13 +166,13 @@ io.on('connection', (socket) => {
   });
 });
 
-// 7. START THE SERVER
+// Start the server
 const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// 8. GRACEFUL SHUTDOWN
+// Graceful Shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received. Shutting down gracefully...');
   server.close(() => {

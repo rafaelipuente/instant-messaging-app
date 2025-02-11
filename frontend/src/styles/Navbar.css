@@ -1,16 +1,17 @@
 /* Navbar.css - modern design */
 
 .navbar {
-  background: white;
-  padding: 1rem 2rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  background-color: #1a1d21;
+  padding: 0 20px;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #2d3139;
   z-index: 1000;
 }
 
@@ -25,13 +26,10 @@
 }
 
 .navbar-brand {
-  display: flex;
-  align-items: center;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: bold;
   text-decoration: none;
-  gap: 0.5rem;
 }
 
 .navbar-logo {
@@ -93,8 +91,8 @@
 }
 
 .navbar-username {
-  color: #7f8c8d;
-  font-weight: 500;
+  color: #ffffff;
+  font-size: 14px;
 }
 
 .navbar-button {
@@ -128,6 +126,20 @@
   text-decoration: none;
   font-weight: 500;
   transition: all 0.2s ease;
+}
+
+.logout-button {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.logout-button:hover {
+  background-color: #c82333;
 }
 
 .nav-link.logout-button:hover {
