@@ -1,291 +1,193 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import axios from 'axios';
-import { API_BASE_URL } from '../config';
+import { SOCKET_URL } from '../config';
 import '../styles/DirectMessages.css';
 
 const DirectMessages = ({ socket }) => {
   const { user } = useAuth();
-  const [selectedChat, setSelectedChat] = useState(null);
-  const [conversations, setConversations] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
   const [users, setUsers] = useState([]);
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingUser, setTypingUser] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [typing, setTyping] = useState(null);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
-  // Fetch users and conversations
   useEffect(() => {
-    if (!user) return;
-    fetchData();
-  }, [user]);
+    if (!socket) return;
 
-  const fetchData = async () => {
-    try {
-      // Fetch users
-      const usersResponse = await axios.get(`${API_BASE_URL}/users/all-users`, {
-        headers: { Authorization: `Bearer ${user.token}` }
-      });
-      
-      const filteredUsers = usersResponse.data.filter(u => u._id !== user._id);
-      setUsers(filteredUsers);
-
-      // Fetch conversations
-      await fetchConversations();
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    }
-  };
-
-  const fetchConversations = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/dm/conversations`, {
-        headers: { Authorization: `Bearer ${user.token}` }
-      });
-      setConversations(response.data);
-    } catch (error) {
-      console.error('Error fetching conversations:', error);
-    }
-  };
-
-  // Fetch messages when a chat is selected
-  useEffect(() => {
-    if (!selectedChat) return;
-    
-    // Join the conversation room for real-time updates
-    socket.emit('join conversation', { conversationId: selectedChat._id });
-    
-    fetchMessages(selectedChat._id);
-
-    return () => {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch(`${SOCKET_URL}/api/users/list`, {
+          headers: { 'Authorization': `Bearer ${user.token}` }
+        });
+        const data = await response.json();
+        setUsers(data.filter(u => u._id !== user._id));
+      } catch (error) {
+        console.error('Error fetching users:', error);
       }
     };
-  }, [selectedChat]);
 
-  const fetchMessages = async (conversationId) => {
-    try {
-      const response = await axios.get(
-        `${API_BASE_URL}/dm/${conversationId}`,
-        { headers: { Authorization: `Bearer ${user.token}` } }
-      );
-      setMessages(response.data);
+    fetchUsers();
+  }, [socket, user]);
+
+  useEffect(() => {
+    if (!socket || !selectedUser) return;
+
+    console.log(`Joining DM with ${selectedUser.username}`);
+
+    socket.emit('joinDM', {
+      userId: user._id,
+      otherUserId: selectedUser._id
+    });
+
+    const handlePreviousDMs = (messages) => {
+      console.log("Received previous DMs:", messages);
+      setMessages(messages);
       scrollToBottom();
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-    }
-  };
+    };
+
+    const handleNewDM = (message) => {
+      setMessages(prev => [...prev, message]);
+      scrollToBottom();
+    };
+
+    const handleTyping = ({ username }) => {
+      if (username !== user.username) {
+        setTyping(username);
+      }
+    };
+
+    const handleStopTyping = () => {
+      setTyping(null);
+    };
+
+    socket.on('previousDMs', handlePreviousDMs);
+    socket.on('newDirectMessage', handleNewDM);
+    socket.on('userTyping', handleTyping);
+    socket.on('userStopTyping', handleStopTyping);
+
+    return () => {
+      socket.off('previousDMs', handlePreviousDMs);
+      socket.off('newDirectMessage', handleNewDM);
+      socket.off('userTyping', handleTyping);
+      socket.off('userStopTyping', handleStopTyping);
+    };
+  }, [socket, selectedUser, user]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Handle socket events
-  useEffect(() => {
-    if (!socket) return;
-
-    socket.on('receive message', (message) => {
-      if (selectedChat && message.conversationId === selectedChat._id) {
-        setMessages(prev => [...prev, message]);
-        scrollToBottom();
-      }
-      fetchConversations();
-    });
-
-    socket.on('userTyping', ({ username }) => {
-      if (username !== user.username) {
-        setTypingUser(username);
-        setIsTyping(true);
-      }
-    });
-
-    socket.on('userStopTyping', () => {
-      setTypingUser(null);
-      setIsTyping(false);
-    });
-
-    return () => {
-      socket.off('receive message');
-      socket.off('userTyping');
-      socket.off('userStopTyping');
-    };
-  }, [socket, selectedChat]);
+  const handleUserSelect = (selectedUser) => {
+    setSelectedUser(selectedUser);
+    setMessages([]);
+  };
 
   const handleMessageChange = (e) => {
-    setNewMessage(e.target.value);
+    setMessage(e.target.value);
+    if (!socket || !selectedUser) return;
 
-    if (!selectedChat) return;
-
-    // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // Emit typing event
     socket.emit('typing', {
-      conversationId: selectedChat._id,
-      username: user.username
+      username: user.username,
+      receiverId: selectedUser._id
     });
 
-    // Set new timeout
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('stopTyping', {
-        conversationId: selectedChat._id
-      });
+      socket.emit('stopTyping', { receiverId: selectedUser._id });
     }, 1000);
   };
 
-  const startChat = async (otherUser) => {
-    try {
-      const response = await axios.post(
-        `${API_BASE_URL}/dm/start`,
-        { otherUserId: otherUser._id },
-        { headers: { Authorization: `Bearer ${user.token}` }}
-      );
-      
-      const { conversationId } = response.data;
-      
-      // Find existing conversation or create new one
-      let conversation = conversations.find(c => c._id === conversationId);
-      if (!conversation) {
-        conversation = {
-          _id: conversationId,
-          participants: [user, otherUser]
-        };
-        setConversations(prev => [...prev, conversation]);
-      }
-      
-      setSelectedChat(conversation);
-      fetchMessages(conversationId);
-    } catch (error) {
-      console.error('Error starting chat:', error);
-      alert('Failed to start chat. Please try again.');
-    }
-  };
-
-  const sendMessage = async (e) => {
+  const handleSendMessage = (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !selectedChat) return;
+    if (!message.trim() || !socket || !selectedUser) return;
 
-    try {
-      const response = await axios.post(
-        `${API_BASE_URL}/dm/${selectedChat._id}/messages`,
-        { content: newMessage },
-        { headers: { Authorization: `Bearer ${user.token}` } }
-      );
+    const newMessage = {
+      sender: { _id: user._id, username: user.username },
+      content: message.trim(),
+      timestamp: new Date()
+    };
 
-      setMessages(prev => [...prev, response.data]);
-      setNewMessage('');
-      scrollToBottom();
+    setMessages(prev => [...prev, newMessage]);
+    setMessage('');
 
-      // Emit the message through socket
-      socket.emit('new message', {
-        conversationId: selectedChat._id,
-        message: response.data
-      });
-
-      fetchConversations();
-    } catch (error) {
-      console.error('Error sending message:', error);
-      alert('Failed to send message. Please try again.');
-    }
+    socket.emit('directMessage', {
+      content: message.trim(),
+      receiverId: selectedUser._id
+    });
   };
 
   return (
-    <div className="direct-messages-container">
-      <div className="sidebar">
-        <div className="users-section">
-          <h3>All Users</h3>
-          <div className="users-list">
-            {users.map(otherUser => (
-              <div
-                key={otherUser._id}
-                className="user-item"
-                onClick={() => startChat(otherUser)}
-              >
-                <div className="user-avatar">
-                  {otherUser.username[0].toUpperCase()}
+    <div className="direct-messages">
+      <div className="users-list">
+        <h2>Direct Messages</h2>
+        {users.map(u => (
+          <div
+            key={u._id}
+            className={`user-item ${selectedUser?._id === u._id ? 'active' : ''}`}
+            onClick={() => handleUserSelect(u)}
+          >
+            <div className="user-avatar">
+              {u.profilePicture ? (
+                <img
+                  src={u.profilePicture.startsWith('http') 
+                    ? u.profilePicture 
+                    : `${SOCKET_URL}${u.profilePicture}`}
+                  alt={u.name}
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || u.username)}&background=random`;
+                  }}
+                />
+              ) : (
+                <div className="avatar-placeholder">
+                  {(u.name || u.username).charAt(0).toUpperCase()}
                 </div>
-                <div className="user-info">
-                  <div className="username">{otherUser.username}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="conversations-section">
-          <h3>Conversations</h3>
-          <div className="conversations-list">
-            {conversations.map(chat => (
-              <div
-                key={chat._id}
-                className={`conversation-item ${selectedChat?._id === chat._id ? 'selected' : ''}`}
-                onClick={() => {
-                  setSelectedChat(chat);
-                  fetchMessages(chat._id);
-                }}
-              >
-                <div className="conversation-avatar">
-                  {chat.participants.find(p => p._id !== user._id)?.username[0].toUpperCase()}
-                </div>
-                <div className="conversation-info">
-                  <div className="conversation-name">
-                    {chat.participants.find(p => p._id !== user._id)?.username}
-                  </div>
-                  {chat.lastMessage && (
-                    <div className="last-message">
-                      {new Date(chat.lastMessage).toLocaleDateString()}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      
-      <div className="chat-area">
-        {selectedChat ? (
-          <>
-            <div className="chat-header">
-              <div className="chat-user-info">
-                <div className="chat-avatar">
-                  {selectedChat.participants.find(p => p._id !== user._id)?.username[0].toUpperCase()}
-                </div>
-                <div className="chat-username">
-                  {selectedChat.participants.find(p => p._id !== user._id)?.username}
-                </div>
+              )}
+            </div>
+            <div className="user-info">
+              <div className="user-name">{u.name || u.username}</div>
+              <div className={`user-status ${u.status || 'online'}`}>
+                {u.status || 'Online'}
               </div>
             </div>
+          </div>
+        ))}
+      </div>
 
+      <div className="chat-area">
+        {selectedUser ? (
+          <>
+            <div className="chat-header">
+              <h3>Chat with {selectedUser.name || selectedUser.username}</h3>
+            </div>
             <div className="messages-container">
-              {messages.map((message, index) => (
+              {messages.map((msg, index) => (
                 <div
-                  key={index}
-                  className={`message ${message.sender._id === user._id ? 'sent' : 'received'}`}
+                  key={msg._id || index}
+                  className={`message ${msg.sender._id === user._id ? 'sent' : 'received'}`}
                 >
-                  <div className="message-content">{message.content}</div>
-                  <div className="message-timestamp">
-                    {new Date(message.timestamp).toLocaleTimeString()}
+                  <div className="message-content">{msg.content}</div>
+                  <div className="message-time">
+                    {new Date(msg.timestamp).toLocaleTimeString()}
                   </div>
                 </div>
               ))}
-              {isTyping && typingUser && (
+              {typing && (
                 <div className="typing-indicator">
-                  {typingUser} is typing...
+                  {typing} is typing...
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
-
-            <form onSubmit={sendMessage} className="message-input-container">
+            <form className="message-input-container" onSubmit={handleSendMessage}>
               <input
                 type="text"
-                value={newMessage}
+                value={message}
                 onChange={handleMessageChange}
                 placeholder="Type a message..."
                 className="message-input"

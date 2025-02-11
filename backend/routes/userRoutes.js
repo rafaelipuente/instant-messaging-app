@@ -8,6 +8,12 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// Load environment variables
+require('dotenv').config();
+
+// Use the same secret everywhere
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
+
 // Ensure uploads directory exists
 const uploadDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -51,7 +57,7 @@ router.use((req, res, next) => {
   next();
 });
 
-// Get all users
+// Get all users except the current user
 router.get('/all-users', auth, async (req, res) => {
   try {
     console.log('Fetching all users...');
@@ -128,10 +134,10 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // Create token
+    // Create token (using JWT_SECRET from env)
     const token = jwt.sign(
       { _id: user._id, username: user.username },
-      'your_jwt_secret',
+      JWT_SECRET,
       { expiresIn: '24h' }
     );
 
@@ -272,18 +278,23 @@ router.put('/profile', auth, upload.single('profilePicture'), async (req, res) =
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Generate new token
+    // Generate new token (again, using JWT_SECRET from env)
     const token = jwt.sign(
       { 
         _id: updatedUser._id,
         username: updatedUser.username,
         profilePicture: updatedUser.profilePicture
       },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    // Return updated user data with token and full profile picture URL
+    // Emit user update event using global io instance
+    if (global.io) {
+      global.io.emit('userUpdated', updatedUser);
+    }
+
+    // Return updated user data with token
     res.json({
       ...updatedUser.toObject(),
       profilePicture: updatedUser.profilePicture,

@@ -13,8 +13,7 @@ const messageSchema = new mongoose.Schema({
   },
   channel: {
     type: String,
-    required: true,
-    enum: ['General', 'Tech Talk', 'Random', 'Music']
+    required: true
   },
   timestamp: {
     type: Date,

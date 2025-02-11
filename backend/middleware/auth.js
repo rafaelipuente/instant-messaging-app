@@ -1,5 +1,11 @@
+/*****************************************************
+ * auth.js (updated to use a single JWT_SECRET)
+ *****************************************************/
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
+require('dotenv').config();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
 
 const auth = async (req, res, next) => {
   try {
@@ -18,7 +24,7 @@ const auth = async (req, res, next) => {
     
     try {
       // Verify token
-      const decoded = jwt.verify(token, 'your_jwt_secret');
+      const decoded = jwt.verify(token, JWT_SECRET);
       
       // Find user
       const user = await User.findById(decoded._id).select('-password');
@@ -26,7 +32,7 @@ const auth = async (req, res, next) => {
         return res.status(401).json({ error: 'User not found' });
       }
 
-      // Set user in request
+      // Attach user to the request
       req.user = user;
       next();
     } catch (error) {

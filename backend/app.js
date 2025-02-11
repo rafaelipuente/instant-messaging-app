@@ -1,41 +1,50 @@
+/*****************************************************
+ * app.js
+ *****************************************************/
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
-require('dotenv').config();
 
+// 1. IMPORT ROUTES
 const userRoutes = require('./routes/userRoutes');
-const chatRoutes = require('./routes/chatRoutes');
+const chatRoomRoutes = require('./routes/chatRoomRoutes'); 
 const directMessageRoutes = require('./routes/directMessageRoutes');
+const messageRoutes = require('./routes/messageRoutes');
 
+// 2. CREATE EXPRESS APP
 const app = express();
 
-// Middleware
+/*****************************************************
+ * 3. MIDDLEWARE
+ *****************************************************/
 app.use(cors({
-  origin: 'http://localhost:3000',
-  credentials: true
+  origin: 'http://localhost:3000',  // adjust if needed
+  credentials: true,
 }));
 app.use(express.json());
 
-// Serve static files from the uploads directory
+// Serve static files (e.g. profile pictures) from "uploads" folder
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Routes
+/*****************************************************
+ * 4. ATTACH ROUTES
+ *****************************************************/
 app.use('/api/users', userRoutes);
-app.use('/api/chat', chatRoutes);
+app.use('/api/chat', chatRoomRoutes);
 app.use('/api/dm', directMessageRoutes);
+app.use('/api/messages', messageRoutes);
 
-// Error handling middleware
+/*****************************************************
+ * 5. ERROR HANDLING
+ *****************************************************/
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  res.status(err.status || 500).json({ 
-    message: err.message || 'Something went wrong!' 
+  res.status(err.status || 500).json({
+    error: err.message || 'Something went wrong!'
   });
 });
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
-
+/*****************************************************
+ * 6. EXPORT
+ *****************************************************/
 module.exports = app;

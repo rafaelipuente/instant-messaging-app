@@ -25,32 +25,36 @@ const Chat = () => {
     { id: 'music', name: 'Music', icon: '🎵' }
   ];
 
-  // Initialize socket connection
   useEffect(() => {
-    const newSocket = io(SOCKET_URL);
-    
-    // Authenticate socket connection
     if (user && user.token) {
-      newSocket.emit('authenticate', user.token);
-    }
-    
-    setSocket(newSocket);
+      const newSocket = io(SOCKET_URL, {
+        auth: { token: user.token }
+      });
 
-    return () => newSocket.close();
+      newSocket.on('connect', () => {
+        console.log('Socket connected');
+        setSocket(newSocket);
+      });
+
+      return () => {
+        if (newSocket) {
+          newSocket.disconnect();
+        }
+      };
+    }
   }, [user]);
 
-  // Join channel and load messages
   useEffect(() => {
-    if (socket && user) {
+    if (socket && activeChannel) {
       socket.emit('join', { userId: user._id, channel: activeChannel });
 
-      socket.on('previousMessages', (previousMessages) => {
-        setMessages(previousMessages);
+      socket.on('previousMessages', (messages) => {
+        setMessages(messages);
         scrollToBottom();
       });
 
-      socket.on('message', (newMessage) => {
-        setMessages(prev => [...prev, newMessage]);
+      socket.on('message', (message) => {
+        setMessages((prev) => [...prev, message]);
         scrollToBottom();
       });
 
@@ -77,59 +81,45 @@ const Chat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  const handleChannelChange = (channel) => {
-    setActiveChannel(channel);
-    setMessages([]);
-    setShowDMs(false);
-    if (socket) {
-      socket.emit('join', { userId: user._id, channel });
+  const handleChannelChange = (channelId) => {
+    const channel = channels.find(c => c.id === channelId);
+    if (channel) {
+      setActiveChannel(channel.name);
+      setMessages([]);
+      setShowDMs(false);
     }
   };
 
   const handleMessageChange = (e) => {
     setMessage(e.target.value);
+    if (socket) {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
 
-    // Clear existing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    // Emit typing event
-    socket.emit('typing', {
-      channel: activeChannel,
-      username: user.username
-    });
-
-    // Set new timeout
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('stopTyping', {
-        channel: activeChannel
+      socket.emit('typing', {
+        channel: activeChannel,
+        username: user.username
       });
-    }, 1000);
+
+      typingTimeoutRef.current = setTimeout(() => {
+        socket.emit('stopTyping', { channel: activeChannel });
+      }, 1000);
+    }
   };
 
   const handleSendMessage = (e) => {
     e.preventDefault();
-    if (!message.trim() || !socket) return;
-
-    socket.emit('message', {
-      content: message.trim(),
-      channel: activeChannel
-    });
-
-    setMessage('');
-    
-    // Clear typing timeout and emit stop typing
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-      socket.emit('stopTyping', {
+    if (message.trim() && socket) {
+      socket.emit('message', {
+        content: message.trim(),
         channel: activeChannel
       });
+      setMessage('');
     }
   };
 
@@ -151,7 +141,7 @@ const Chat = () => {
             <div
               key={channel.id}
               className={`channel-item ${activeChannel === channel.name ? 'active' : ''}`}
-              onClick={() => handleChannelChange(channel.name)}
+              onClick={() => handleChannelChange(channel.id)}
             >
               <span className="channel-icon">{channel.icon}</span>
               <span className="channel-name">{channel.name}</span>
@@ -240,7 +230,9 @@ const Chat = () => {
                 <div className="user-avatar">
                   {selectedUser.profilePicture ? (
                     <img 
-                      src={`http://localhost:5001${selectedUser.profilePicture}`}
+                      src={selectedUser.profilePicture.startsWith('http') 
+                        ? selectedUser.profilePicture 
+                        : `${SOCKET_URL}${selectedUser.profilePicture}`}
                       alt={selectedUser.name}
                       className="user-avatar-image"
                       onError={(e) => {

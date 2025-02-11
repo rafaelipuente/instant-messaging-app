@@ -44,7 +44,6 @@ router.get('/conversations', auth, async (req, res) => {
       participants: req.user._id
     })
     .populate('participants', 'username')
-    .populate('lastMessage')
     .sort({ updatedAt: -1 });
 
     res.json(conversations);
@@ -77,7 +76,7 @@ router.get('/:conversationId', auth, async (req, res) => {
   }
 });
 
-// Send a message in a conversation
+// Send a message in a conversation (🔥 FIXED WITH SOCKET.IO)
 router.post('/:conversationId/messages', auth, async (req, res) => {
   try {
     const { content } = req.body;
@@ -115,6 +114,13 @@ router.post('/:conversationId/messages', auth, async (req, res) => {
     };
 
     res.json(populatedMessage);
+
+    // 🔥 Emit message via Socket.IO
+    const roomId = conversation.participants.map(u => u._id.toString()).sort().join('-');
+    if (global.io) {
+      global.io.to(roomId).emit('newDirectMessage', populatedMessage);
+    }
+
   } catch (error) {
     console.error('Error sending message:', error);
     res.status(500).json({ message: 'Error sending message' });
