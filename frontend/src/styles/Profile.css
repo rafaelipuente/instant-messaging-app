@@ -1,7 +1,19 @@
+:root {
+  --bg-primary: #36393f;
+  --bg-secondary: #2f3136;
+  --bg-tertiary: rgba(79, 84, 92, 0.3);
+  --text-primary: #fff;
+  --text-secondary: #b9bbbe;
+  --border-color: #40444b;
+  --accent-color: #5865f2;
+  --accent-hover: #4752c4;
+  --bg-hover: rgba(79, 84, 92, 0.4);
+}
+
 .page-container {
   min-height: 100vh;
   padding-top: 60px;
-  background-color: #36393f;
+  background-color: var(--bg-primary);
 }
 
 .profile-content {
@@ -11,7 +23,7 @@
 }
 
 .profile-card {
-  background-color: #2f3136;
+  background-color: var(--bg-secondary);
   border-radius: 12px;
   padding: 24px;
   width: 100%;
@@ -39,7 +51,7 @@
 }
 
 .profile-header h2 {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 24px;
   font-weight: 600;
   margin: 0;
@@ -49,10 +61,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #b9bbbe;
+  color: var(--text-secondary);
   font-size: 13px;
   padding: 4px 12px;
-  background-color: rgba(79, 84, 92, 0.3);
+  background-color: var(--bg-tertiary);
   border-radius: 99px;
   text-transform: capitalize;
   font-weight: 500;
@@ -118,19 +130,19 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background-color: rgba(79, 84, 92, 0.3);
-  color: #fff;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
   border: none;
   border-radius: 4px;
   padding: 8px 16px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s;
 }
 
 .back-button:hover {
-  background-color: rgba(79, 84, 92, 0.4);
+  background-color: var(--bg-hover);
   transform: translateY(-1px);
 }
 
@@ -141,20 +153,20 @@
 .edit-button {
   display: inline-flex;
   align-items: center;
-  background-color: #5865f2;
-  color: #fff;
+  background-color: var(--accent-color);
+  color: white;
   border: none;
   border-radius: 4px;
   padding: 8px 20px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s;
   box-shadow: 0 2px 5px rgba(88, 101, 242, 0.3);
 }
 
 .edit-button:hover {
-  background-color: #4752c4;
+  background-color: var(--accent-hover);
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(88, 101, 242, 0.4);
 }
@@ -183,8 +195,8 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  background-color: #5865f2;
-  color: #fff;
+  background-color: var(--accent-color);
+  color: var(--text-primary);
   font-size: 36px;
   font-weight: 600;
   display: flex;
@@ -196,8 +208,8 @@
   position: absolute;
   bottom: 0;
   right: 0;
-  background-color: #5865f2;
-  color: #fff;
+  background-color: var(--accent-color);
+  color: var(--text-primary);
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -206,11 +218,11 @@
   justify-content: center;
   cursor: pointer;
   transition: background-color 0.2s;
-  border: 2px solid #2f3136;
+  border: 2px solid var(--bg-secondary);
 }
 
 .profile-picture-upload:hover {
-  background-color: #4752c4;
+  background-color: var(--accent-hover);
 }
 
 .upload-icon {
@@ -230,7 +242,7 @@
 }
 
 .form-group label {
-  color: #b9bbbe;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -238,11 +250,11 @@
 
 .form-group input,
 .form-group select {
-  background-color: #40444b;
-  border: 1px solid transparent;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   padding: 8px 12px;
-  color: #dcddde;
+  color: var(--text-primary);
   font-size: 14px;
   transition: border-color 0.2s;
 }
@@ -250,14 +262,14 @@
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #5865f2;
+  border-color: var(--accent-color);
 }
 
 .form-group input:disabled,
 .form-group select:disabled {
   opacity: 0.7;
   cursor: not-allowed;
-  background-color: #36393f;
+  background-color: var(--bg-secondary);
 }
 
 .error-message {
@@ -273,8 +285,8 @@
 }
 
 .save-button {
-  background-color: #5865f2;
-  color: #fff;
+  background-color: var(--accent-color);
+  color: white;
   border: none;
   border-radius: 4px;
   padding: 10px;
@@ -286,7 +298,7 @@
 }
 
 .save-button:hover {
-  background-color: #4752c4;
+  background-color: var(--accent-hover);
 }
 
 .save-button:disabled {
@@ -308,7 +320,7 @@
 }
 
 .profile-content {
-  background: white;
+  background-color: var(--bg-secondary);
   padding: 32px;
   border-radius: 12px;
   width: 90%;
@@ -317,6 +329,7 @@
   overflow-y: auto;
   position: relative;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  color: var(--text-primary);
 }
 
 .close-button {
@@ -327,18 +340,18 @@
   border: none;
   font-size: 24px;
   cursor: pointer;
-  color: #666;
+  color: var(--text-secondary);
   padding: 4px 8px;
   border-radius: 4px;
 }
 
 .close-button:hover {
-  background-color: #f1f3f5;
+  background-color: var(--bg-hover);
 }
 
 .profile-content h2 {
   margin: 0 0 24px 0;
-  color: #333;
+  color: var(--text-primary);
   font-size: 24px;
 }
 
@@ -357,28 +370,30 @@
 .form-group label {
   font-size: 14px;
   font-weight: 500;
-  color: #495057;
+  color: var(--text-secondary);
 }
 
 .form-group input,
 .form-group textarea {
   padding: 10px 12px;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   font-size: 14px;
   transition: all 0.2s ease;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #339af0;
+  border-color: var(--accent-color);
   box-shadow: 0 0 0 3px rgba(51, 154, 240, 0.1);
 }
 
 .form-group input:disabled,
 .form-group textarea:disabled {
-  background-color: #f8f9fa;
+  background-color: var(--bg-secondary);
   cursor: not-allowed;
 }
 
@@ -401,18 +416,18 @@
 }
 
 .edit-button {
-  background-color: #339af0;
+  background-color: var(--accent-color);
   color: white;
 }
 
 .save-button {
-  background-color: #40c057;
+  background-color: var(--accent-color);
   color: white;
 }
 
 .cancel-button {
-  background-color: #f1f3f5;
-  color: #495057;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .edit-button:hover,
@@ -421,7 +436,7 @@
 }
 
 .cancel-button:hover {
-  background-color: #e9ecef;
+  background-color: var(--bg-hover);
 }
 
 /* Custom scrollbar */
@@ -434,12 +449,12 @@
 }
 
 .profile-content::-webkit-scrollbar-thumb {
-  background: #dee2e6;
+  background: var(--border-color);
   border-radius: 3px;
 }
 
 .profile-content::-webkit-scrollbar-thumb:hover {
-  background: #adb5bd;
+  background: var(--bg-hover);
 }
 
 /* Mobile responsive */
@@ -461,20 +476,20 @@
 }
 
 .error-message {
-    color: #dc3545;
-    margin-bottom: 1rem;
-    text-align: center;
+  color: #dc3545;
+  margin-bottom: 1rem;
+  text-align: center;
 }
 
 .success-message {
-    color: #28a745;
-    margin-bottom: 1rem;
-    text-align: center;
+  color: #28a745;
+  margin-bottom: 1rem;
+  text-align: center;
 }
 
 .profile-container {
   min-height: 100vh;
-  background-color: #f8f9fa;
+  background-color: var(--bg-primary);
 }
 
 .profile-content {
@@ -486,7 +501,7 @@
 }
 
 .profile-card {
-  background: white;
+  background-color: var(--bg-secondary);
   border-radius: 12px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   padding: 2rem;
@@ -520,12 +535,12 @@
 .profile-avatar {
   width: 80px;
   height: 80px;
-  background-color: #4A90E2;
+  background-color: var(--accent-color);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--text-primary);
   font-size: 2rem;
   font-weight: bold;
   overflow: hidden;
@@ -538,7 +553,7 @@
 }
 
 .profile-header h1 {
-  color: #1e293b;
+  color: var(--text-primary);
   margin: 0;
   font-size: 2.5rem;
   font-weight: 600;
@@ -554,13 +569,13 @@
 
 .info-group label,
 .form-group label {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   font-weight: 500;
 }
 
 .info-group p {
-  color: #2c3e50;
+  color: var(--text-primary);
   font-size: 1rem;
   margin: 0;
   padding: 0.5rem 0;
@@ -568,25 +583,27 @@
 
 .form-input {
   padding: 0.75rem 1rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   font-size: 1rem;
   transition: all 0.2s ease;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .form-input:focus {
   outline: none;
-  border-color: #3498db;
+  border-color: var(--accent-color);
   box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
 }
 
 .form-input:disabled {
-  background-color: #f8f9fa;
+  background-color: var(--bg-secondary);
   cursor: not-allowed;
 }
 
 small {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 0.8rem;
   margin-top: 0.25rem;
 }
@@ -597,7 +614,7 @@ small {
   padding: 0.5rem 1rem;
   border-radius: 20px;
   font-size: 0.9rem;
-  color: #64748b;
+  color: var(--text-secondary);
   margin-top: 0.25rem;
 }
 
@@ -618,7 +635,7 @@ small {
 
 .status-badge.offline {
   background-color: #f1f5f9;
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 .profile-actions {
@@ -640,28 +657,28 @@ small {
 
 .btn-edit,
 .btn-save {
-  background: #3498db;
+  background-color: var(--accent-color);
   color: white;
 }
 
 .btn-edit:hover,
 .btn-save:hover {
-  background: #2980b9;
+  background-color: var(--accent-hover);
 }
 
 .btn-cancel {
-  background: #e2e8f0;
-  color: #64748b;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .btn-cancel:hover {
-  background: #cbd5e1;
+  background-color: var(--bg-hover);
 }
 
 .btn-back {
   padding: 0.2rem 0.4rem;
-  background-color: #e2e8f0;
-  color: #475569;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -682,7 +699,7 @@ small {
 }
 
 .btn-back:hover {
-  background-color: #cbd5e1;
+  background-color: var(--bg-hover);
   transform: translateY(-1px);
 }
 
@@ -704,8 +721,8 @@ small {
 
 .file-input-label {
   padding: 0.4rem 0.8rem;
-  background-color: #e2e8f0;
-  color: #475569;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.8rem;
@@ -715,7 +732,7 @@ small {
 }
 
 .file-input-label:hover {
-  background-color: #cbd5e1;
+  background-color: var(--bg-hover);
 }
 
 .profile-picture-controls {
@@ -734,7 +751,7 @@ small {
 
 .btn-upload {
   padding: 0.4rem 1rem;
-  background-color: #10B981;
+  background-color: var(--accent-color);
   color: white;
   border: none;
   border-radius: 6px;
@@ -744,7 +761,7 @@ small {
 }
 
 .btn-upload:hover {
-  background-color: #059669;
+  background-color: var(--accent-hover);
 }
 
 .btn-upload:active {

@@ -2,7 +2,7 @@
     max-width: 800px;
     margin: 2rem auto;
     padding: 2rem;
-    background-color: #ffffff;
+    background-color: var(--bg-secondary);
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
@@ -13,7 +13,7 @@
     gap: 2rem;
     margin-bottom: 2rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .user-profile-avatar {
@@ -21,13 +21,13 @@
     height: 120px;
     border-radius: 50%;
     object-fit: cover;
-    border: 3px solid #fff;
+    border: 3px solid var(--bg-primary);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .user-profile-header h1 {
     margin: 0;
-    color: #333;
+    color: var(--text-primary);
     font-size: 2rem;
 }
 
@@ -36,13 +36,13 @@
 }
 
 .user-profile-bio h2 {
-    color: #555;
+    color: var(--text-primary);
     font-size: 1.2rem;
     margin-bottom: 0.5rem;
 }
 
 .user-profile-bio p {
-    color: #666;
+    color: var(--text-secondary);
     line-height: 1.6;
 }
 
@@ -54,20 +54,20 @@
 
 .stat {
     padding: 1rem;
-    background-color: #f8f9fa;
+    background-color: var(--bg-tertiary);
     border-radius: 6px;
 }
 
 .stat-label {
     display: block;
-    color: #666;
+    color: var(--text-secondary);
     font-size: 0.9rem;
     margin-bottom: 0.3rem;
 }
 
 .stat-value {
     display: block;
-    color: #333;
+    color: var(--text-primary);
     font-weight: 600;
 }
 
@@ -76,11 +76,11 @@
 .user-profile-not-found {
     text-align: center;
     padding: 2rem;
-    color: #666;
+    color: var(--text-secondary);
 }
 
 .user-profile-error {
-    color: #dc3545;
+    color: var(--error-color);
 }
 
 @media (max-width: 600px) {
@@ -101,52 +101,235 @@
 }
 
 .profile-container {
-  max-width: 600px;
-  margin: 2rem auto;
-  padding: 2rem;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    max-width: 600px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background-color: var(--bg-secondary);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .profile-info {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
 .info-row {
-  display: flex;
-  gap: 1rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #eee;
+    display: flex;
+    gap: 1rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .label {
-  font-weight: bold;
-  min-width: 100px;
+    font-weight: bold;
+    min-width: 100px;
+    color: var(--text-primary);
 }
 
 button {
-  margin-top: 1rem;
-  padding: 0.5rem 1rem;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
 }
 
 button:hover {
-  background-color: #0056b3;
+    background-color: var(--accent-hover);
 }
 
 .error-message {
-  color: #dc3545;
-  margin-bottom: 1rem;
+    color: var(--error-color);
+    margin-bottom: 1rem;
 }
 
 .loading {
-  text-align: center;
-  color: #6c757d;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+/* Profile Preview Modal */
+.profile-preview-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+
+.profile-preview-content {
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: var(--shadow-md);
+  position: relative;
+}
+
+.profile-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.profile-preview-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+.profile-preview-close:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.profile-preview-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+.profile-preview-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background-color: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.profile-preview-info {
+  flex: 1;
+}
+
+.profile-preview-name {
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 0.25rem;
+}
+
+.profile-preview-username {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.profile-preview-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background-color: var(--bg-tertiary);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.profile-preview-status.away {
+  color: var(--status-away);
+}
+
+.profile-preview-status.online {
+  color: var(--status-online);
+}
+
+.profile-preview-status.offline {
+  color: var(--status-offline);
+}
+
+.profile-preview-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.profile-preview-button {
+  flex: 1;
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.profile-preview-button.primary {
+  background-color: var(--accent-color);
+  color: white;
+}
+
+.profile-preview-button.primary:hover {
+  background-color: var(--accent-hover);
+}
+
+.profile-preview-button.secondary {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.profile-preview-button.secondary:hover {
+  background-color: var(--bg-hover);
+}
+
+/* Dark mode specific overrides */
+.dark-mode .profile-preview-content {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.dark-mode .profile-preview-close {
+  color: var(--text-secondary);
+}
+
+.dark-mode .profile-preview-close:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.dark-mode .profile-preview-name {
+  color: var(--text-primary);
+}
+
+.dark-mode .profile-preview-username {
+  color: var(--text-secondary);
+}
+
+.dark-mode .profile-preview-status {
+  background-color: var(--bg-tertiary);
+}
+
+.dark-mode .profile-preview-button.secondary {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.dark-mode .profile-preview-button.secondary:hover {
+  background-color: var(--bg-hover);
 }

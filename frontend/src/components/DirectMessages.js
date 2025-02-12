@@ -117,12 +117,13 @@ const DirectMessages = ({ socket }) => {
   return (
     <div className="direct-messages">
       <div className="users-list">
+        <button className="back-button" onClick={handleBack}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          <span>Private Messages</span>
+        </button>
         <div className="section-header">
-          <button className="back-button" onClick={handleBack}>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-          </button>
           <h2>Private Messages</h2>
         </div>
         {users.map((u) => (
@@ -131,11 +132,25 @@ const DirectMessages = ({ socket }) => {
             className={`user-item ${selectedUser?._id === u._id ? 'active' : ''}`}
             onClick={() => handleUserSelect(u)}
           >
-            <img 
-              src={u.profilePicture || '/default-avatar.png'} 
-              alt={u.username} 
-              className="user-avatar"
-            />
+            <div className="user-avatar">
+              {u.profilePicture ? (
+                <img 
+                  src={u.profilePicture} 
+                  alt={u.username}
+                  className="user-avatar-image"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`;
+                  }}
+                />
+              ) : (
+                <img 
+                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`}
+                  alt={u.username}
+                  className="user-avatar-image"
+                />
+              )}
+            </div>
             <div className="user-info">
               <span className="user-name">{u.username}</span>
               <span className="user-status">{u.status || 'offline'}</span>
