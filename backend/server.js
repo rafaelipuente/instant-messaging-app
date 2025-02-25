@@ -45,7 +45,13 @@ io.use((socket, next) => {
 
 // Socket.io Event Handlers
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.username);
+  console.log('User connected:', socket.userId);
+
+  // Add user to socket room
+  if (socket.userId) {
+    socket.join(socket.userId);
+    io.emit('userConnected', socket.userId);
+  }
 
   /**
    * JOIN A CHAT CHANNEL
@@ -125,17 +131,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  /**
-   * SEND A DIRECT MESSAGE
-   */
   socket.on('directMessage', async ({ content, receiverId }) => {
     try {
-      // Prevent self-messaging
-      if (socket.userId === receiverId) {
-        console.warn('Blocked attempt to self-message:', socket.userId);
-        return;
-      }
-
       const newMessage = await DirectMessage.create({
         content,
         sender: socket.userId,
@@ -144,25 +141,41 @@ io.on('connection', (socket) => {
       });
 
       const populatedMessage = await DirectMessage.findById(newMessage._id)
-        .populate('sender', 'username name profilePicture status')
-        .populate('receiver', 'username name profilePicture status');
+        .populate('sender', 'username profilePicture')
+        .populate('receiver', 'username profilePicture');
 
-      // Create unique room ID for the conversation
-      const roomId = [socket.userId, receiverId].sort().join('-');
-      io.to(roomId).emit('newDirectMessage', populatedMessage);
+      // Send to both sender and receiver
+      io.to(socket.userId).emit('newDirectMessage', populatedMessage);
+      io.to(receiverId).emit('newDirectMessage', populatedMessage);
 
-      console.log('Direct message saved:', populatedMessage._id);
+      // Update active chats for both users
+      io.to(socket.userId).emit('updateActiveChats', receiverId);
+      io.to(receiverId).emit('updateActiveChats', socket.userId);
     } catch (error) {
-      console.error('Error in directMessage:', error);
-      socket.emit('messageError', { error: 'Failed to send message' });
+      console.error('Error in direct message:', error);
+      socket.emit('error', { message: 'Failed to send message' });
     }
   });
 
-  /**
-   * DISCONNECT
-   */
+  // Socket event handlers
+  socket.on('updateActiveChats', async ({ userId }) => {
+    try {
+      // Find the user to add to active chats
+      const user = await User.findById(userId).select('username profilePicture');
+      if (user) {
+        io.to(socket.userId).emit('updateActiveChats', userId);
+        io.to(userId).emit('updateActiveChats', socket.userId);
+      }
+    } catch (error) {
+      console.error('Error updating active chats:', error);
+    }
+  });
+
   socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.username);
+    if (socket.userId) {
+      console.log('User disconnected:', socket.userId);
+      io.emit('userDisconnected', socket.userId);
+    }
   });
 });
 

@@ -14,7 +14,19 @@ const DirectMessages = () => {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const [activeChats, setActiveChats] = useState([]);
+  const [failedImages, setFailedImages] = useState(new Set());
   const messagesEndRef = useRef(null);
+
+  const getProfilePictureUrl = (profilePicture) => {
+    if (!profilePicture) return '/default-avatar.png';
+    if (failedImages.has(profilePicture)) return '/default-avatar.png';
+    if (profilePicture.startsWith('http')) return profilePicture;
+    return `${SOCKET_URL}${profilePicture}`.replace(/([^:]\/)\/+/g, "$1");
+  };
+
+  const handleImageError = (profilePicture) => {
+    setFailedImages(prev => new Set([...prev, profilePicture]));
+  };
 
   useEffect(() => {
     if (!user?.token) {
@@ -32,6 +44,9 @@ const DirectMessages = () => {
 
     newSocket.on('connect', () => {
       console.log('Socket connected successfully');
+      // Fetch initial data after socket connects
+      fetchUsers();
+      fetchOpenChats();
     });
 
     newSocket.on('connect_error', (error) => {
@@ -41,37 +56,11 @@ const DirectMessages = () => {
 
     setSocket(newSocket);
 
-    // Fetch initial users list
-    fetchUsers();
-
     return () => {
       console.log('Cleaning up socket connection');
       newSocket.close();
     };
   }, [user?.token]);
-
-  const fetchUsers = async () => {
-    if (!user?.token) return;
-
-    try {
-      const response = await fetch(`${SOCKET_URL}/api/users/list`, {
-        headers: {
-          'Authorization': `Bearer ${user.token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch users');
-      }
-
-      const data = await response.json();
-      const filteredUsers = data.filter(u => u._id !== user._id);
-      setUsers(filteredUsers);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    }
-  };
 
   useEffect(() => {
     if (!socket || !user) return;
@@ -95,15 +84,9 @@ const DirectMessages = () => {
         setTimeout(scrollToBottom, 0);
       }
 
-      // Update active chats
-      const otherUser = users.find(u => u._id === otherUserId);
-      if (otherUser) {
-        setActiveChats(prev => {
-          if (!prev.find(chat => chat._id === otherUserId)) {
-            return [...prev, otherUser];
-          }
-          return prev;
-        });
+      // Add sender to open chats if not already there
+      if (message.sender._id !== user._id) {
+        addToOpenChats(message.sender._id);
       }
     });
 
@@ -112,10 +95,110 @@ const DirectMessages = () => {
       socket.off('userConnected');
       socket.off('userDisconnected');
     };
-  }, [socket, user, selectedUser, users]);
+  }, [socket, user, selectedUser]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const fetchUsers = async () => {
+    if (!user?.token) return;
+
+    try {
+      const response = await fetch(`${SOCKET_URL}/api/users/list`, {
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch users');
+      }
+
+      const data = await response.json();
+      // Reset failed images when fetching new user list
+      setFailedImages(new Set());
+      const filteredUsers = data.filter(u => u._id !== user._id).map(u => ({
+        ...u,
+        profilePicture: u.profilePicture || null
+      }));
+      setUsers(filteredUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
+
+  const fetchOpenChats = async () => {
+    if (!user?.token) return;
+
+    try {
+      const response = await fetch(`${SOCKET_URL}/api/users/open-chats`, {
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch open chats');
+      }
+
+      const data = await response.json();
+      setActiveChats(data);
+    } catch (error) {
+      console.error('Error fetching open chats:', error);
+    }
+  };
+
+  const addToOpenChats = async (userId) => {
+    if (!user?.token) return;
+
+    try {
+      const response = await fetch(`${SOCKET_URL}/api/users/open-chats/${userId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add to open chats');
+      }
+
+      const newChat = await response.json();
+      setActiveChats(prev => {
+        if (!prev.find(chat => chat._id === newChat._id)) {
+          return [...prev, newChat];
+        }
+        return prev;
+      });
+    } catch (error) {
+      console.error('Error adding to open chats:', error);
+    }
+  };
+
+  const removeFromOpenChats = async (userId) => {
+    if (!user?.token) return;
+
+    try {
+      const response = await fetch(`${SOCKET_URL}/api/users/open-chats/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to remove from open chats');
+      }
+
+      setActiveChats(prev => prev.filter(chat => chat._id !== userId));
+      if (selectedUser?._id === userId) {
+        setSelectedUser(null);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('Error removing from open chats:', error);
+    }
   };
 
   const handleUserSelect = async (clickedUser) => {
@@ -123,6 +206,9 @@ const DirectMessages = () => {
     setMessages([]); // Clear messages while loading
 
     try {
+      // Add to open chats when selecting a user
+      await addToOpenChats(clickedUser._id);
+
       const response = await fetch(`${SOCKET_URL}/api/messages/direct/${clickedUser._id}`, {
         headers: {
           'Authorization': `Bearer ${user.token}`,
@@ -137,14 +223,6 @@ const DirectMessages = () => {
       const data = await response.json();
       setMessages(data);
       setTimeout(scrollToBottom, 0);
-
-      // Add to active chats
-      setActiveChats(prev => {
-        if (!prev.find(chat => chat._id === clickedUser._id)) {
-          return [...prev, clickedUser];
-        }
-        return prev;
-      });
     } catch (error) {
       console.error('Error fetching messages:', error);
     }
@@ -152,17 +230,21 @@ const DirectMessages = () => {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!message.trim() || !selectedUser) return;
+    if (!message.trim() || !selectedUser || !socket) return;
 
     try {
       socket.emit('directMessage', {
-        content: message,
+        content: message.trim(),
         receiverId: selectedUser._id
       });
       setMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
     }
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
@@ -183,11 +265,14 @@ const DirectMessages = () => {
                   className={`user-item ${selectedUser?._id === user._id ? 'selected' : ''}`}
                   onClick={() => handleUserSelect(user)}
                 >
-                  <img
-                    src={user.profilePicture || '/default-avatar.png'}
-                    alt={user.username}
-                    className="user-avatar"
-                  />
+                  <div className="avatar-container">
+                    <img
+                      src={getProfilePictureUrl(user.profilePicture)}
+                      alt={user.username}
+                      className="user-avatar"
+                      onError={() => handleImageError(user.profilePicture)}
+                    />
+                  </div>
                   <span className="username">{user.username}</span>
                 </div>
               ))}
@@ -206,12 +291,24 @@ const DirectMessages = () => {
                   className={`user-item ${selectedUser?._id === user._id ? 'selected' : ''}`}
                   onClick={() => handleUserSelect(user)}
                 >
-                  <img
-                    src={user.profilePicture || '/default-avatar.png'}
-                    alt={user.username}
-                    className="user-avatar"
-                  />
+                  <div className="avatar-container">
+                    <img
+                      src={getProfilePictureUrl(user.profilePicture)}
+                      alt={user.username}
+                      className="user-avatar"
+                      onError={() => handleImageError(user.profilePicture)}
+                    />
+                  </div>
                   <span className="username">{user.username}</span>
+                  <button
+                    className="remove-chat"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFromOpenChats(user._id);
+                    }}
+                  >
+                    ×
+                  </button>
                 </div>
               ))}
               {activeChats.length === 0 && (

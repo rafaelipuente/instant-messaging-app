@@ -28,8 +28,11 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    // Use a more deterministic filename
+    const userId = req.user._id;
+    const fileExt = path.extname(file.originalname);
+    const filename = `${userId}-${Date.now()}${fileExt}`;
+    cb(null, filename);
   }
 });
 
@@ -132,19 +135,25 @@ router.post('/login', async (req, res) => {
     console.log('Login attempt for:', req.body.username);
     const { username, password } = req.body;
 
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
     // Find user
     const user = await User.findOne({ username: username.toLowerCase() });
     if (!user) {
+      console.log('User not found:', username);
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
     // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      console.log('Invalid password for user:', username);
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // Create token (using JWT_SECRET from env)
+    // Create token
     const token = jwt.sign(
       { _id: user._id, username: user.username },
       JWT_SECRET,
@@ -152,7 +161,7 @@ router.post('/login', async (req, res) => {
     );
 
     // Send response
-    res.json({
+    const response = {
       token,
       user: {
         _id: user._id,
@@ -160,9 +169,11 @@ router.post('/login', async (req, res) => {
         name: user.name,
         profilePicture: user.profilePicture
       }
-    });
+    };
 
     console.log('Login successful for:', username);
+    console.log('Response:', response);
+    res.json(response);
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
@@ -215,23 +226,26 @@ router.post('/upload-profile-picture', auth, upload.single('profilePicture'), as
   }
 });
 
-// Get list of users for direct messaging
+// Get list of all users
 router.get('/list', auth, async (req, res) => {
   try {
-    const currentUserId = req.user._id.toString(); // Convert to string for comparison
-    console.log('Current user requesting list:', currentUserId);
+    const currentUserId = req.user._id;
+    const users = await User.find(
+      { _id: { $ne: currentUserId } },
+      'username profilePicture'
+    ).lean();
 
-    // Find all users
-    const users = await User.find({}, 'username name profilePicture status');
-    
-    // Filter out the current user
-    const filteredUsers = users.filter(user => user._id.toString() !== currentUserId);
-    
-    console.log(`Found ${filteredUsers.length} other users`);
-    res.json(filteredUsers);
+    // Transform profile picture paths to full URLs
+    const usersWithFullPicturePaths = users.map(user => ({
+      ...user,
+      profilePicture: user.profilePicture ? `/uploads/${path.basename(user.profilePicture)}` : null
+    }));
+
+    console.log('Sending users list:', usersWithFullPicturePaths);
+    res.json(usersWithFullPicturePaths);
   } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({ error: 'Error fetching users' });
+    console.error('Error in /list route:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
 
@@ -264,63 +278,41 @@ router.put('/profile', auth, upload.single('profilePicture'), async (req, res) =
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Prepare update object
-    const updateData = {
-      name: name || currentUser.name,
-      username: username ? username.toLowerCase() : currentUser.username,
-      status: status || currentUser.status
-    };
-
-    // Handle profile picture upload
+    // Handle profile picture update
+    let profilePicturePath = currentUser.profilePicture;
     if (req.file) {
       // Delete old profile picture if it exists
       if (currentUser.profilePicture) {
-        const oldPicturePath = path.join(__dirname, '..', currentUser.profilePicture);
+        const oldPicturePath = path.join(uploadDir, path.basename(currentUser.profilePicture));
         if (fs.existsSync(oldPicturePath)) {
           fs.unlinkSync(oldPicturePath);
         }
       }
-
-      updateData.profilePicture = '/uploads/' + req.file.filename;
+      profilePicturePath = req.file.filename;
     }
 
     // Update user
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      updateData,
-      { new: true, runValidators: true }
-    ).select('-password');
-
-    if (!updatedUser) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    // Generate new token (again, using JWT_SECRET from env)
-    const token = jwt.sign(
-      { 
-        _id: updatedUser._id,
-        username: updatedUser.username,
-        profilePicture: updatedUser.profilePicture
+      {
+        name: name || currentUser.name,
+        username: username ? username.toLowerCase() : currentUser.username,
+        status: status || currentUser.status,
+        profilePicture: profilePicturePath
       },
-      JWT_SECRET,
-      { expiresIn: '7d' }
+      { new: true }
     );
 
-    // Emit user update event using global io instance
-    if (global.io) {
-      global.io.emit('userUpdated', updatedUser);
-    }
-
-    // Return updated user data with token
     res.json({
-      ...updatedUser.toObject(),
-      profilePicture: updatedUser.profilePicture,
-      token
+      _id: updatedUser._id,
+      username: updatedUser.username,
+      name: updatedUser.name,
+      status: updatedUser.status,
+      profilePicture: updatedUser.profilePicture ? `/uploads/${path.basename(updatedUser.profilePicture)}` : null
     });
-
   } catch (error) {
-    console.error('Profile update error:', error);
-    res.status(500).json({ message: 'Failed to update profile' });
+    console.error('Error updating profile:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
   }
 });
 
@@ -371,6 +363,93 @@ router.get('/:userId', auth, async (req, res) => {
     res.json(user);
   } catch (error) {
     res.status(500).json({ error: 'Error fetching user' });
+  }
+});
+
+// Get open chats for user
+router.get('/open-chats', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .populate('openChats', 'username profilePicture status')
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.openChats) {
+      return res.json([]);
+    }
+
+    const openChats = user.openChats.map(chat => ({
+      _id: chat._id,
+      username: chat.username,
+      status: chat.status,
+      profilePicture: chat.profilePicture ? `/uploads/${path.basename(chat.profilePicture)}` : null
+    }));
+
+    res.json(openChats);
+  } catch (error) {
+    console.error('Error fetching open chats:', error);
+    res.status(500).json({ error: 'Failed to fetch open chats' });
+  }
+});
+
+// Add chat to open chats
+router.post('/open-chats/:userId', auth, async (req, res) => {
+  try {
+    const chatUserId = req.params.userId;
+    const currentUserId = req.user._id;
+
+    // Don't add self to open chats
+    if (chatUserId === currentUserId.toString()) {
+      return res.status(400).json({ error: 'Cannot add self to open chats' });
+    }
+
+    // Check if chat user exists
+    const chatUser = await User.findById(chatUserId);
+    if (!chatUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Add to open chats if not already there
+    const user = await User.findById(currentUserId);
+    if (!user.openChats) {
+      user.openChats = [];
+    }
+    
+    if (!user.openChats.includes(chatUserId)) {
+      user.openChats.push(chatUserId);
+      await user.save();
+    }
+
+    // Return the updated chat user info
+    res.json({
+      _id: chatUser._id,
+      username: chatUser.username,
+      status: chatUser.status,
+      profilePicture: chatUser.profilePicture ? `/uploads/${path.basename(chatUser.profilePicture)}` : null
+    });
+  } catch (error) {
+    console.error('Error adding open chat:', error);
+    res.status(500).json({ error: 'Failed to add open chat' });
+  }
+});
+
+// Remove chat from open chats
+router.delete('/open-chats/:userId', auth, async (req, res) => {
+  try {
+    const chatUserId = req.params.userId;
+    const currentUserId = req.user._id;
+
+    const user = await User.findById(currentUserId);
+    user.openChats = user.openChats.filter(id => id.toString() !== chatUserId);
+    await user.save();
+
+    res.json({ message: 'Chat removed from open chats' });
+  } catch (error) {
+    console.error('Error removing open chat:', error);
+    res.status(500).json({ error: 'Failed to remove open chat' });
   }
 });
 

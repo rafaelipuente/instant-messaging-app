@@ -7,27 +7,27 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
     trim: true,
-    minlength: 3,
-    maxlength: 20,
     lowercase: true
   },
   password: {
     type: String,
-    required: true,
-    minlength: 6
+    required: true
   },
-  name: {
+  profilePicture: {
     type: String,
-    required: true,
-    trim: true
+    default: null
   },
   status: {
     type: String,
     default: 'online'
   },
-  profilePicture: {
-    type: String,
-    default: null
+  openChats: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  lastSeen: {
+    type: Date,
+    default: Date.now
   }
 }, {
   timestamps: true
@@ -35,10 +35,8 @@ const userSchema = new mongoose.Schema({
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) {
-    return next();
-  }
-
+  if (!this.isModified('password')) return next();
+  
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
@@ -48,6 +46,13 @@ userSchema.pre('save', async function(next) {
   }
 });
 
-const User = mongoose.model('User', userSchema);
+// Compare password method
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  try {
+    return await bcrypt.compare(candidatePassword, this.password);
+  } catch (error) {
+    throw error;
+  }
+};
 
-module.exports = User;
+module.exports = mongoose.model('User', userSchema);

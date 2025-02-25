@@ -7,6 +7,7 @@ import Register from '../pages/Register';
 import Chat from './Chat';
 import Home from './Home';
 import Profile from './Profile';
+import DirectMessages from './DirectMessages';
 import '../styles/theme.css';
 
 // Protected Route Component
@@ -39,6 +40,14 @@ const App = () => {
                 element={
                   <ProtectedRoute>
                     <Chat />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/direct-messages"
+                element={
+                  <ProtectedRoute>
+                    <DirectMessages />
                   </ProtectedRoute>
                 }
               />

@@ -2,46 +2,67 @@ const express = require('express');
 const router = express.Router();
 const Message = require('../models/messageModel');
 const User = require('../models/userModel');
+const auth = require('../middleware/auth');
 
-// Get messages for a specific room
-router.get('/:room', async (req, res) => {
+// Get all messages
+router.get('/', auth, async (req, res) => {
   try {
-    const messages = await Message.find({ room: req.params.room })
-      .populate('sender', 'username')
-      .sort({ timestamp: 1 });
+    const messages = await Message.find()
+      .sort({ timestamp: 1 })
+      .populate('sender', 'username profilePicture');
+    res.json(messages);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get direct messages between two users
+router.get('/direct/:userId', auth, async (req, res) => {
+  try {
+    const messages = await Message.find({
+      $or: [
+        { sender: req.user._id, receiver: req.params.userId },
+        { sender: req.params.userId, receiver: req.user._id }
+      ]
+    })
+    .sort({ timestamp: 1 })
+    .populate('sender', 'username profilePicture')
+    .populate('receiver', 'username profilePicture');
     
     res.json(messages);
   } catch (error) {
+    console.error('Error fetching messages:', error);
     res.status(500).json({ message: 'Error fetching messages' });
   }
 });
 
-// Save a new message
-router.post('/', async (req, res) => {
+// Get active chats for a user
+router.get('/active-chats', auth, async (req, res) => {
   try {
-    const { content, room, username } = req.body;
-    
-    // Find the user by username
-    const user = await User.findOne({ username });
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+    const messages = await Message.find({
+      $or: [
+        { sender: req.user._id },
+        { receiver: req.user._id }
+      ]
+    }).sort({ timestamp: -1 });
 
-    const message = new Message({
-      content,
-      room,
-      sender: user._id,
-      timestamp: new Date()
+    const userIds = new Set();
+    messages.forEach(msg => {
+      if (msg.sender.toString() === req.user._id.toString()) {
+        userIds.add(msg.receiver.toString());
+      } else {
+        userIds.add(msg.sender.toString());
+      }
     });
 
-    await message.save();
-    
-    // Populate sender information before sending response
-    await message.populate('sender', 'username');
-    
-    res.status(201).json(message);
+    const users = await User.find({
+      _id: { $in: Array.from(userIds) }
+    }).select('username profilePicture');
+
+    res.json(users);
   } catch (error) {
-    res.status(500).json({ message: 'Error saving message' });
+    console.error('Error fetching active chats:', error);
+    res.status(500).json({ message: 'Error fetching active chats' });
   }
 });
 

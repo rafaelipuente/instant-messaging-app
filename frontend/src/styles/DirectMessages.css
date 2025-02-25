@@ -44,6 +44,28 @@
   cursor: pointer;
   transition: background-color 0.2s;
   border-bottom: 1px solid #e0e0e0;
+  position: relative;
+}
+
+.remove-chat {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 5px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.user-item:hover .remove-chat {
+  opacity: 1;
+}
+
+.remove-chat:hover {
+  color: #ff4444;
 }
 
 .user-item:hover {
@@ -54,11 +76,22 @@
   background-color: #e3f2fd;
 }
 
-.user-avatar {
+.avatar-container {
   width: 32px;
   height: 32px;
   border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
   margin-right: 0.75rem;
+  background-color: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-avatar {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
 }
 

@@ -4,6 +4,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs'); // added fs module
 
 // 1. IMPORT ROUTES
 const userRoutes = require('./routes/userRoutes');
@@ -23,8 +24,20 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 // Serve static files (e.g. profile pictures) from "uploads" folder
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(uploadsDir));
+
+// Log all requests to /uploads for debugging
+app.use('/uploads', (req, res, next) => {
+  console.log('Profile picture request:', req.url);
+  next();
+});
 
 /*****************************************************
  * 4. ATTACH ROUTES

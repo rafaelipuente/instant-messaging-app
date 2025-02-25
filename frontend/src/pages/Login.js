@@ -44,8 +44,8 @@ const Login = () => {
           ...response.data.user,
           token: response.data.token
         };
-        login(userData);
-        navigate('/chat');
+        await login(userData);
+        navigate('/');
       } else {
         throw new Error('Invalid response from server');
       }
