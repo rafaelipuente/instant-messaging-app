@@ -439,17 +439,27 @@ router.post('/open-chats/:userId', auth, async (req, res) => {
 // Remove chat from open chats
 router.delete('/open-chats/:userId', auth, async (req, res) => {
   try {
-    const chatUserId = req.params.userId;
     const currentUserId = req.user._id;
+    const userIdToRemove = req.params.userId;
 
+    // Generate chat ID to find messages
+    const chatId = `dm-${[currentUserId.toString(), userIdToRemove].sort().join('-')}`;
+
+    // Delete all messages in this chat
+    await Message.deleteMany({
+      channel: chatId,
+      messageType: 'direct'
+    });
+
+    // Remove from open chats
     const user = await User.findById(currentUserId);
-    user.openChats = user.openChats.filter(id => id.toString() !== chatUserId);
+    user.openChats = user.openChats.filter(id => !id.equals(userIdToRemove));
     await user.save();
 
-    res.json({ message: 'Chat removed from open chats' });
+    res.json({ message: 'Chat removed and messages deleted successfully' });
   } catch (error) {
-    console.error('Error removing open chat:', error);
-    res.status(500).json({ error: 'Failed to remove open chat' });
+    console.error('Error removing from open chats:', error);
+    res.status(500).json({ error: 'Failed to remove from open chats' });
   }
 });
 
