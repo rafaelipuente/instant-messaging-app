@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { SOCKET_URL } from '../config';
 import io from 'socket.io-client';
+import UserAvatar from './UserAvatar';
 import '../styles/DirectMessages.css';
 
 const DirectMessages = () => {
@@ -280,12 +281,12 @@ const DirectMessages = () => {
                   onClick={() => handleUserSelect(user)}
                 >
                   <div className="avatar-container">
-                    <img
-                      src={getProfilePictureUrl(user.profilePicture)}
-                      alt={user.username}
+                    <UserAvatar
+                      profilePicture={getProfilePictureUrl(user.profilePicture)}
+                      username={user.username}
                       className="user-avatar"
-                      onError={() => handleImageError(user.profilePicture)}
                     />
+                    <span className={`status-indicator ${user.status || 'offline'}`}></span>
                   </div>
                   <span className="username">{user.username}</span>
                 </div>
@@ -306,13 +307,12 @@ const DirectMessages = () => {
                   onClick={() => handleUserSelect(chat)}
                 >
                   <div className="avatar-container">
-                    <img
-                      src={getProfilePictureUrl(chat.profilePicture)}
-                      alt={chat.username}
+                    <UserAvatar
+                      profilePicture={getProfilePictureUrl(chat.profilePicture)}
+                      username={chat.username}
                       className="user-avatar"
-                      onError={() => handleImageError(chat.profilePicture)}
                     />
-                    <span className={`status-indicator ${chat.status}`}></span>
+                    <span className={`status-indicator ${chat.status || 'offline'}`}></span>
                   </div>
                   <span className="username">{chat.username}</span>
                   <button 
@@ -339,13 +339,12 @@ const DirectMessages = () => {
               <div className="chat-header">
                 <div className="user-info">
                   <div className="avatar-container">
-                    <img
-                      src={getProfilePictureUrl(selectedUser.profilePicture)}
-                      alt={selectedUser.username}
+                    <UserAvatar
+                      profilePicture={getProfilePictureUrl(selectedUser.profilePicture)}
+                      username={selectedUser.username}
                       className="user-avatar"
-                      onError={() => handleImageError(selectedUser.profilePicture)}
                     />
-                    <span className={`status-indicator ${selectedUser.status}`}></span>
+                    <span className={`status-indicator ${selectedUser.status || 'offline'}`}></span>
                   </div>
                   <span className="username">{selectedUser.username}</span>
                 </div>
@@ -359,7 +358,7 @@ const DirectMessages = () => {
                   >
                     <div className="message-content">{msg.content}</div>
                     <div className="message-timestamp">
-                      {new Date(msg.timestamp).toLocaleTimeString()}
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
                 ))}
