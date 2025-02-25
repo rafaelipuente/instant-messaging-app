@@ -1,13 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 const getInitials = (username) => {
   if (!username) return '?';
-  return username
-    .split(' ')
-    .map(word => word[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  return username.charAt(0).toUpperCase();
 };
 
 const getRandomColor = (username) => {
@@ -22,40 +17,61 @@ const getRandomColor = (username) => {
   return colors[index % colors.length];
 };
 
-const UserAvatar = ({ profilePicture, username, className = '', onError }) => {
-  const [showDefault, setShowDefault] = React.useState(!profilePicture);
+const UserAvatar = ({ profilePicture, username, status = 'offline', className = '', onError }) => {
+  const [showDefault, setShowDefault] = useState(!profilePicture);
   const initials = getInitials(username);
   const backgroundColor = getRandomColor(username);
 
-  if (showDefault) {
-    return (
-      <div 
-        className={`default-avatar ${className}`}
-        style={{
-          backgroundColor,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white',
-          fontWeight: '500',
-          fontSize: '14px',
-          width: '100%',
-          height: '100%',
-          borderRadius: '50%'
-        }}
-      >
-        {initials}
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (profilePicture) {
+      const img = new Image();
+      img.src = profilePicture;
+      img.onload = () => setShowDefault(false);
+      img.onerror = () => {
+        setShowDefault(true);
+        if (onError) onError(profilePicture);
+      };
+    } else {
+      setShowDefault(true);
+    }
+  }, [profilePicture, onError]);
 
   return (
-    <img
-      src={profilePicture}
-      alt={username}
-      className={className}
-      onError={() => setShowDefault(true)}
-    />
+    <div className={`avatar-container ${className}`}>
+      {showDefault ? (
+        <div 
+          className="default-avatar"
+          style={{
+            backgroundColor,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontWeight: '600',
+            fontSize: '16px',
+            width: '100%',
+            height: '100%',
+            borderRadius: '50%',
+            textShadow: '1px 1px 2px rgba(0, 0, 0, 0.1)'
+          }}
+        >
+          {initials}
+        </div>
+      ) : (
+        <div 
+          className="user-avatar"
+          style={{
+            width: '100%',
+            height: '100%',
+            borderRadius: '50%',
+            backgroundImage: `url(${profilePicture})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }}
+        />
+      )}
+      <span className={`status-indicator ${status}`} />
+    </div>
   );
 };
 

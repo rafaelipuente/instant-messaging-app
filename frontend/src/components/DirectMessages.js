@@ -19,14 +19,16 @@ const DirectMessages = () => {
   const messagesEndRef = useRef(null);
 
   const getProfilePictureUrl = (profilePicture) => {
-    if (!profilePicture) return '/default-avatar.png';
-    if (failedImages.has(profilePicture)) return '/default-avatar.png';
+    if (!profilePicture) return null;
+    if (failedImages.has(profilePicture)) return null;
     if (profilePicture.startsWith('http')) return profilePicture;
     return `${SOCKET_URL}${profilePicture}`.replace(/([^:]\/)\/+/g, "$1");
   };
 
   const handleImageError = (profilePicture) => {
-    setFailedImages(prev => new Set([...prev, profilePicture]));
+    if (profilePicture) {
+      setFailedImages(prev => new Set([...prev, profilePicture]));
+    }
   };
 
   useEffect(() => {
@@ -266,29 +268,26 @@ const DirectMessages = () => {
     <div className="direct-messages">
       <div className="direct-messages-container">
         <div className="users-list">
-          <div className="section-header">
-            <button className="back-btn" onClick={() => navigate('/')}>Back</button>
+          <div className="private-messages-header">
             <h2>Private Messages</h2>
           </div>
 
           <div className="section">
             <h3>Users Online</h3>
             <div className="users-container">
-              {users.map(user => (
+              {users.map((u) => (
                 <div
-                  key={user._id}
-                  className={`user-item ${selectedUser?._id === user._id ? 'selected' : ''}`}
-                  onClick={() => handleUserSelect(user)}
+                  key={u._id}
+                  className={`user-item ${selectedUser?._id === u._id ? 'selected' : ''}`}
+                  onClick={() => handleUserSelect(u)}
                 >
-                  <div className="avatar-container">
-                    <UserAvatar
-                      profilePicture={getProfilePictureUrl(user.profilePicture)}
-                      username={user.username}
-                      className="user-avatar"
-                    />
-                    <span className={`status-indicator ${user.status || 'offline'}`}></span>
-                  </div>
-                  <span className="username">{user.username}</span>
+                  <UserAvatar
+                    profilePicture={getProfilePictureUrl(u.profilePicture)}
+                    username={u.username}
+                    status="online"
+                    onError={() => handleImageError(u.profilePicture)}
+                  />
+                  <span className="username">{u.username}</span>
                 </div>
               ))}
               {users.length === 0 && (
@@ -300,32 +299,32 @@ const DirectMessages = () => {
           <div className="section">
             <h3>Open DMs</h3>
             <div className="users-container">
-              {activeChats.map(chat => (
-                <div
-                  key={chat._id}
-                  className={`user-item ${selectedUser?._id === chat._id ? 'selected' : ''}`}
-                  onClick={() => handleUserSelect(chat)}
-                >
-                  <div className="avatar-container">
-                    <UserAvatar
-                      profilePicture={getProfilePictureUrl(chat.profilePicture)}
-                      username={chat.username}
-                      className="user-avatar"
-                    />
-                    <span className={`status-indicator ${chat.status || 'offline'}`}></span>
-                  </div>
-                  <span className="username">{chat.username}</span>
-                  <button 
-                    className="close-chat"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeFromOpenChats(chat._id);
-                    }}
+              {activeChats
+                .filter(chatUser => chatUser._id !== user._id)
+                .map((u) => (
+                  <div
+                    key={u._id}
+                    className={`user-item ${selectedUser?._id === u._id ? 'selected' : ''}`}
+                    onClick={() => handleUserSelect(u)}
                   >
-                    ×
-                  </button>
-                </div>
-              ))}
+                    <UserAvatar
+                      profilePicture={getProfilePictureUrl(u.profilePicture)}
+                      username={u.username}
+                      status={users.some(online => online._id === u._id) ? 'online' : 'offline'}
+                      onError={() => handleImageError(u.profilePicture)}
+                    />
+                    <span className="username">{u.username}</span>
+                    <button 
+                      className="close-chat"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFromOpenChats(u._id);
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
               {activeChats.length === 0 && (
                 <div className="no-users">No open chats</div>
               )}
@@ -342,9 +341,9 @@ const DirectMessages = () => {
                     <UserAvatar
                       profilePicture={getProfilePictureUrl(selectedUser.profilePicture)}
                       username={selectedUser.username}
-                      className="user-avatar"
+                      status={users.some(online => online._id === selectedUser._id) ? 'online' : 'offline'}
+                      onError={() => handleImageError(selectedUser.profilePicture)}
                     />
-                    <span className={`status-indicator ${selectedUser.status || 'offline'}`}></span>
                   </div>
                   <span className="username">{selectedUser.username}</span>
                 </div>
