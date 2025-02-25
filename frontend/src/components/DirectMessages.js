@@ -299,26 +299,27 @@ const DirectMessages = () => {
           <div className="section">
             <h3>Open DMs</h3>
             <div className="users-container">
-              {activeChats.map(user => (
+              {activeChats.map(chat => (
                 <div
-                  key={user._id}
-                  className={`user-item ${selectedUser?._id === user._id ? 'selected' : ''}`}
-                  onClick={() => handleUserSelect(user)}
+                  key={chat._id}
+                  className={`user-item ${selectedUser?._id === chat._id ? 'selected' : ''}`}
+                  onClick={() => handleUserSelect(chat)}
                 >
                   <div className="avatar-container">
                     <img
-                      src={getProfilePictureUrl(user.profilePicture)}
-                      alt={user.username}
+                      src={getProfilePictureUrl(chat.profilePicture)}
+                      alt={chat.username}
                       className="user-avatar"
-                      onError={() => handleImageError(user.profilePicture)}
+                      onError={() => handleImageError(chat.profilePicture)}
                     />
+                    <span className={`status-indicator ${chat.status}`}></span>
                   </div>
-                  <span className="username">{user.username}</span>
-                  <button
-                    className="remove-chat"
+                  <span className="username">{chat.username}</span>
+                  <button 
+                    className="close-chat"
                     onClick={(e) => {
                       e.stopPropagation();
-                      removeFromOpenChats(user._id);
+                      removeFromOpenChats(chat._id);
                     }}
                   >
                     ×
@@ -326,37 +327,46 @@ const DirectMessages = () => {
                 </div>
               ))}
               {activeChats.length === 0 && (
-                <div className="no-users">No active chats</div>
+                <div className="no-users">No open chats</div>
               )}
             </div>
           </div>
         </div>
 
-        <div className="chat-section">
+        <div className="chat-area">
           {selectedUser ? (
             <>
               <div className="chat-header">
-                <h3>Chat with {selectedUser.username}</h3>
+                <div className="user-info">
+                  <div className="avatar-container">
+                    <img
+                      src={getProfilePictureUrl(selectedUser.profilePicture)}
+                      alt={selectedUser.username}
+                      className="user-avatar"
+                      onError={() => handleImageError(selectedUser.profilePicture)}
+                    />
+                    <span className={`status-indicator ${selectedUser.status}`}></span>
+                  </div>
+                  <span className="username">{selectedUser.username}</span>
+                </div>
               </div>
 
               <div className="messages-container">
                 {messages.map((msg, index) => (
                   <div
-                    key={index}
+                    key={msg._id || index}
                     className={`message ${msg.sender._id === user._id ? 'sent' : 'received'}`}
                   >
-                    <div className="message-content">
-                      <div className="message-bubble">{msg.content}</div>
-                      <div className="message-info">
-                        {new Date(msg.timestamp).toLocaleTimeString()}
-                      </div>
+                    <div className="message-content">{msg.content}</div>
+                    <div className="message-timestamp">
+                      {new Date(msg.timestamp).toLocaleTimeString()}
                     </div>
                   </div>
                 ))}
                 <div ref={messagesEndRef} />
               </div>
 
-              <form onSubmit={handleSendMessage} className="message-input-container">
+              <form className="message-input" onSubmit={handleSendMessage}>
                 <input
                   type="text"
                   value={message}
@@ -368,8 +378,7 @@ const DirectMessages = () => {
             </>
           ) : (
             <div className="no-chat-selected">
-              <h3>Welcome to Direct Messages</h3>
-              <p>Select a user to start chatting</p>
+              <h3>Select a user to start chatting</h3>
             </div>
           )}
         </div>
