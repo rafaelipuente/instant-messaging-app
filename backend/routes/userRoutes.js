@@ -132,51 +132,51 @@ router.post('/register', async (req, res) => {
 // Login user
 router.post('/login', async (req, res) => {
   try {
-    console.log('Login attempt for:', req.body.username);
     const { username, password } = req.body;
 
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
-    }
+    // Find user by username
+    const user = await User.findOne({ username: username.toLowerCase() })
+      .populate('openChats', 'username profilePicture status');
 
-    // Find user
-    const user = await User.findOne({ username: username.toLowerCase() });
     if (!user) {
-      console.log('User not found:', username);
-      return res.status(400).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Check password
-    const isMatch = await bcrypt.compare(password, user.password);
+    // Compare password
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      console.log('Invalid password for user:', username);
-      return res.status(400).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Create token
+    // Generate JWT token
     const token = jwt.sign(
       { _id: user._id, username: user.username },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '7d' }
     );
 
-    // Send response
-    const response = {
-      token,
+    // Transform open chats data
+    const openChats = user.openChats.map(chat => ({
+      _id: chat._id,
+      username: chat.username,
+      status: chat.status,
+      profilePicture: chat.profilePicture ? `/uploads/${path.basename(chat.profilePicture)}` : null
+    }));
+
+    // Return user data and token
+    res.json({
       user: {
         _id: user._id,
         username: user.username,
-        name: user.name,
-        profilePicture: user.profilePicture
-      }
-    };
-
-    console.log('Login successful for:', username);
-    console.log('Response:', response);
-    res.json(response);
+        profilePicture: user.profilePicture ? `/uploads/${path.basename(user.profilePicture)}` : null,
+        status: user.status,
+        openChats: openChats
+      },
+      token
+    });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

@@ -19,7 +19,76 @@ const getFullProfilePictureUrl = (profilePicture) => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('user');
+    }
+  }, [user]);
+
+  const login = async (userData) => {
+    try {
+      if (!userData || !userData._id || !userData.username || !userData.token) {
+        console.error('Invalid user data:', userData);
+        throw new Error('Invalid user data');
+      }
+
+      if (userData.profilePicture) {
+        userData.profilePicture = getFullProfilePictureUrl(userData.profilePicture);
+      }
+
+      setUser({
+        ...userData,
+        openChats: userData.openChats || []
+      });
+    } catch (error) {
+      console.error('Error in login:', error);
+      throw error;
+    }
+  };
+
+  const logout = () => {
+    try {
+      setUser(null);
+    } catch (error) {
+      console.error('Error in logout:', error);
+    }
+  };
+
+  const updateUser = (updates) => {
+    try {
+      if (!updates || !updates._id || !updates.username) {
+        console.error('Invalid user data:', updates);
+        throw new Error('Invalid user data');
+      }
+
+      if (updates.profilePicture) {
+        updates.profilePicture = getFullProfilePictureUrl(updates.profilePicture);
+      }
+
+      setUser(prev => ({
+        ...prev,
+        ...updates
+      }));
+    } catch (error) {
+      console.error('Error in updateUser:', error);
+      throw error;
+    }
+  };
+
+  const updateOpenChats = (newOpenChats) => {
+    setUser(prev => ({
+      ...prev,
+      openChats: newOpenChats
+    }));
+  };
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,59 +109,12 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const login = (userData) => {
-    try {
-      if (!userData || !userData._id || !userData.username || !userData.token) {
-        console.error('Invalid user data:', userData);
-        throw new Error('Invalid user data');
-      }
-
-      if (userData.profilePicture) {
-        userData.profilePicture = getFullProfilePictureUrl(userData.profilePicture);
-      }
-
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
-    } catch (error) {
-      console.error('Error in login:', error);
-      throw error;
-    }
-  };
-
-  const logout = () => {
-    try {
-      setUser(null);
-      localStorage.removeItem('user');
-    } catch (error) {
-      console.error('Error in logout:', error);
-    }
-  };
-
-  const updateUser = (userData) => {
-    try {
-      if (!userData || !userData._id || !userData.username) {
-        console.error('Invalid user data:', userData);
-        throw new Error('Invalid user data');
-      }
-
-      if (userData.profilePicture) {
-        userData.profilePicture = getFullProfilePictureUrl(userData.profilePicture);
-      }
-
-      const updatedUserData = { ...userData, token: user?.token };
-      setUser(updatedUserData);
-      localStorage.setItem('user', JSON.stringify(updatedUserData));
-    } catch (error) {
-      console.error('Error in updateUser:', error);
-      throw error;
-    }
-  };
-
   const value = {
     user,
     login,
     logout,
     updateUser,
+    updateOpenChats,
     loading,
     getFullProfilePictureUrl
   };

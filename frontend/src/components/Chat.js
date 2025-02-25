@@ -46,16 +46,16 @@ const Chat = () => {
 
   useEffect(() => {
     if (socket && activeChannel) {
-      socket.emit('join', { userId: user._id, channel: activeChannel });
+      socket.emit('join', { channel: activeChannel });
 
       socket.on('previousMessages', (messages) => {
         setMessages(messages);
-        // Immediately scroll to bottom when messages are loaded
         setTimeout(scrollToBottom, 0);
       });
 
-      socket.on('message', (message) => {
-        setMessages((prevMessages) => [...prevMessages, message]);
+      socket.on('newChannelMessage', (message) => {
+        setMessages(prevMessages => [...prevMessages, message]);
+        setTimeout(scrollToBottom, 0);
       });
 
       socket.on('userTyping', ({ username }) => {
@@ -70,12 +70,12 @@ const Chat = () => {
 
       return () => {
         socket.off('previousMessages');
-        socket.off('message');
+        socket.off('newChannelMessage');
         socket.off('userTyping');
         socket.off('userStopTyping');
       };
     }
-  }, [socket, activeChannel, user._id, user.username]);
+  }, [socket, activeChannel, user.username]);
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
@@ -134,9 +134,9 @@ const Chat = () => {
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (message.trim() && socket) {
-      socket.emit('message', {
+      socket.emit('channelMessage', {
         content: message.trim(),
-        channel: activeChannel
+        channel: activeChannel.toLowerCase()
       });
       setMessage('');
     }

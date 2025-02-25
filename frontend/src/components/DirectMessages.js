@@ -6,7 +6,7 @@ import io from 'socket.io-client';
 import '../styles/DirectMessages.css';
 
 const DirectMessages = () => {
-  const { user } = useAuth();
+  const { user, updateOpenChats } = useAuth();
   const navigate = useNavigate();
   const [socket, setSocket] = useState(null);
   const [users, setUsers] = useState([]);
@@ -34,6 +34,11 @@ const DirectMessages = () => {
       return;
     }
 
+    // Set initial open chats from user data
+    if (user.openChats) {
+      setActiveChats(user.openChats);
+    }
+
     // Initialize socket connection
     const newSocket = io(SOCKET_URL, {
       auth: {
@@ -46,7 +51,10 @@ const DirectMessages = () => {
       console.log('Socket connected successfully');
       // Fetch initial data after socket connects
       fetchUsers();
-      fetchOpenChats();
+      // Only fetch open chats if not provided in user data
+      if (!user.openChats) {
+        fetchOpenChats();
+      }
     });
 
     newSocket.on('connect_error', (error) => {
@@ -147,6 +155,11 @@ const DirectMessages = () => {
     }
   };
 
+  const setAndUpdateOpenChats = (newChats) => {
+    setActiveChats(newChats);
+    updateOpenChats(newChats);
+  };
+
   const addToOpenChats = async (userId) => {
     if (!user?.token) return;
 
@@ -164,12 +177,11 @@ const DirectMessages = () => {
       }
 
       const newChat = await response.json();
-      setActiveChats(prev => {
-        if (!prev.find(chat => chat._id === newChat._id)) {
-          return [...prev, newChat];
-        }
-        return prev;
-      });
+      const updatedChats = [...activeChats];
+      if (!updatedChats.find(chat => chat._id === newChat._id)) {
+        updatedChats.push(newChat);
+        setAndUpdateOpenChats(updatedChats);
+      }
     } catch (error) {
       console.error('Error adding to open chats:', error);
     }
@@ -191,7 +203,9 @@ const DirectMessages = () => {
         throw new Error('Failed to remove from open chats');
       }
 
-      setActiveChats(prev => prev.filter(chat => chat._id !== userId));
+      const updatedChats = activeChats.filter(chat => chat._id !== userId);
+      setAndUpdateOpenChats(updatedChats);
+      
       if (selectedUser?._id === userId) {
         setSelectedUser(null);
         setMessages([]);
