@@ -160,6 +160,28 @@ const Chat = () => {
     };
   }, [socket, activeChannel, addNotification]);
 
+  useEffect(() => {
+    if (!socket || !activeChannel) return;
+    
+    // Join the room (channel)
+    socket.emit('join room', activeChannel);
+    console.log(`Joining room: ${activeChannel}`);
+    
+    // Listen for chat messages in this room
+    const handleChatMessage = (msg) => {
+      if (msg.room === activeChannel) {
+        setMessages(prevMessages => [...prevMessages, msg]);
+        scrollToBottom();
+      }
+    };
+    
+    socket.on('chat message', handleChatMessage);
+    
+    return () => {
+      socket.off('chat message', handleChatMessage);
+    };
+  }, [socket, activeChannel]);
+
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
@@ -232,13 +254,35 @@ const Chat = () => {
 
   const handleSendMessage = (e) => {
     e.preventDefault();
-    if (message.trim() && socket) {
+    if (!message.trim() || !socket) return;
+
+    // For channel messages
+    if (activeChannel && !showDMs) {
+      const messageData = {
+        content: message,
+        room: activeChannel,
+        sender: {
+          _id: user._id,
+          username: user.username
+        },
+        timestamp: new Date()
+      };
+      
+      // Emit to socket with room information
+      socket.emit('chat message', messageData);
+      
+      // Optimistically add to UI
+      setMessages(prevMessages => [...prevMessages, messageData]);
+      scrollToBottom();
+    } else {
+      // For direct messages - use existing directMessage event
       socket.emit('channelMessage', {
-        content: message.trim(),
-        channel: activeChannel.toLowerCase()
+        content: message,
+        channel: activeChannel
       });
-      setMessage('');
     }
+    
+    setMessage('');
   };
 
   const handleUserClick = (clickedUser) => {
