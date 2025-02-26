@@ -5,13 +5,21 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
-const { handleDirectMessage, handleChannelMessage } = require('./socket/messageHandler');
+const { handleDirectMessage, handleChannelMessage, handleMessageDeletion } = require('./socket/messageHandler');
 const Message = require('./models/messageModel');
 
 require('dotenv').config();
 
 const app = require('./app');
 const User = require('./models/userModel');
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
 
 const server = http.createServer(app);
 const io = socketIo(server, {
@@ -92,54 +100,43 @@ io.on('connection', async (socket) => {
     // Handle channel messages
     socket.on('channelMessage', (data) => handleChannelMessage(io, socket, data));
 
+    // Handle message deletion
+    socket.on('deleteMessage', (data) => handleMessageDeletion(io, socket, data));
+
     // Handle user typing
     socket.on('typing', ({ channel, username }) => {
       socket.to(channel.toLowerCase()).emit('userTyping', { username });
     });
 
-    socket.on('stopTyping', ({ channel }) => {
-      socket.to(channel.toLowerCase()).emit('userStopTyping');
-    });
-
     // Handle disconnection
     socket.on('disconnect', async () => {
-      console.log('User disconnected:', socket.user.username);
-      
-      // Leave all channels
-      if (socket.currentChannel) {
-        socket.leave(socket.currentChannel);
+      try {
+        console.log('User disconnected:', socket.user.username);
+        
+        // Update user status to offline
+        await User.findByIdAndUpdate(socket.user._id, { status: 'offline', lastSeen: new Date() });
+        io.emit('userDisconnected', { userId: socket.user._id });
+      } catch (error) {
+        console.error('Error handling disconnect:', error);
       }
-      
-      // Update user status to offline
-      await User.findByIdAndUpdate(socket.user._id, { 
-        status: 'offline',
-        lastSeen: new Date()
-      });
-      
-      io.emit('userDisconnected', { userId: socket.user._id });
     });
-
   } catch (error) {
-    console.error('Error in socket connection:', error);
+    console.error('Error handling socket connection:', error);
   }
 });
 
-const PORT = process.env.PORT || 5001;
+// Start the server
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
-    console.log('Connected to MongoDB');
-    server.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  })
-  .catch((error) => {
-    console.error('MongoDB connection error:', error);
-  });
-
-// Graceful Shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down gracefully...');
+// Handle server shutdown gracefully
+process.on('SIGINT', async () => {
+  console.log('Server shutting down...');
+  // Close database connection
+  await mongoose.connection.close();
+  // Close server
   server.close(() => {
     console.log('Server closed');
     process.exit(0);

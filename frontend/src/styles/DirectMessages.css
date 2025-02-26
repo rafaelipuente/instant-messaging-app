@@ -252,6 +252,34 @@
   align-self: flex-start;
 }
 
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 5px;
+}
+
+.message-sender {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+}
+
+.delete-message {
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.delete-message:hover {
+  opacity: 1;
+  background-color: rgba(255, 0, 0, 0.1);
+  transform: scale(1.1);
+}
+
 .message-content {
   padding: 10px 15px;
   border-radius: 15px;
@@ -350,6 +378,32 @@
   height: 1px;
   background: #e0e0e0;
   margin: 10px 0;
+}
+
+/* Message deletion animation */
+@keyframes deleteMessage {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+.message.deleting {
+  animation: deleteMessage 0.5s ease forwards;
+  pointer-events: none;
+}
+
+.message.deleting .message-content {
+  background-color: rgba(200, 200, 200, 0.5);
+  color: #777;
 }
 
 /* Dark mode */

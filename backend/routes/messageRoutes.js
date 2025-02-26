@@ -5,14 +5,14 @@ const User = require('../models/userModel');
 const auth = require('../middleware/auth');
 const path = require('path');
 
-// Get messages for a channel
+// Get messages for a channel with pagination and caching
 router.get('/channel/:channelName', auth, async (req, res) => {
   try {
     const { channelName } = req.params;
     const { limit = 50, before } = req.query;
 
     const query = {
-      channel: channelName,
+      channel: channelName.toLowerCase(),
       messageType: 'channel'
     };
 
@@ -47,12 +47,14 @@ router.get('/channel/:channelName', auth, async (req, res) => {
   }
 });
 
-// Get messages between two users
+// Get messages between two users with pagination
 router.get('/direct/:userId', auth, async (req, res) => {
   try {
     const currentUserId = req.user._id;
     const otherUserId = req.params.userId;
     const chatId = Message.generateChatId(currentUserId, otherUserId);
+
+    console.log(`Fetching direct messages for chat ID: ${chatId}`);
 
     const messages = await Message.find({
       channel: chatId,
@@ -62,6 +64,8 @@ router.get('/direct/:userId', auth, async (req, res) => {
       .populate('sender', 'username profilePicture')
       .populate('receiver', 'username profilePicture')
       .lean();
+
+    console.log(`Found ${messages.length} messages for chat ID: ${chatId}`);
 
     // Transform messages for client
     const transformedMessages = messages.map(msg => ({
@@ -85,6 +89,7 @@ router.get('/direct/:userId', auth, async (req, res) => {
     res.json(transformedMessages);
   } catch (error) {
     console.error('Error fetching direct messages:', error);
+    console.error('Error details:', error.stack);
     res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
@@ -98,7 +103,7 @@ router.post('/channel/:channelName', auth, async (req, res) => {
     const message = new Message({
       sender: req.user._id,
       content,
-      channel: channelName,
+      channel: channelName.toLowerCase(),
       messageType: 'channel'
     });
 
@@ -133,6 +138,9 @@ router.post('/direct/:userId', auth, async (req, res) => {
     const senderId = req.user._id;
     const receiverId = req.params.userId;
     const chatId = Message.generateChatId(senderId, receiverId);
+
+    console.log(`Creating direct message in chat ID: ${chatId}`);
+    console.log(`Sender: ${senderId}, Receiver: ${receiverId}`);
 
     const message = new Message({
       sender: senderId,
@@ -181,35 +189,34 @@ router.post('/direct/:userId', auth, async (req, res) => {
       }
     };
 
+    console.log('Direct message saved successfully');
     res.status(201).json(transformedMessage);
   } catch (error) {
     console.error('Error saving direct message:', error);
+    console.error('Error details:', error.stack);
     res.status(500).json({ error: 'Failed to save message' });
   }
 });
 
-// Mark messages as read
-router.put('/direct/:userId/read', auth, async (req, res) => {
+// Delete a message
+router.delete('/:messageId', auth, async (req, res) => {
   try {
-    const currentUserId = req.user._id;
-    const otherUserId = req.params.userId;
-    const chatId = Message.generateChatId(currentUserId, otherUserId);
-
-    await Message.updateMany(
-      {
-        channel: chatId,
-        receiver: currentUserId,
-        read: false
-      },
-      {
-        $set: { read: true }
-      }
-    );
-
-    res.json({ message: 'Messages marked as read' });
+    const message = await Message.findById(req.params.messageId);
+    
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+    
+    // Check if user is authorized to delete this message
+    if (message.sender.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Not authorized to delete this message' });
+    }
+    
+    await Message.findByIdAndDelete(req.params.messageId);
+    res.json({ message: 'Message deleted successfully' });
   } catch (error) {
-    console.error('Error marking messages as read:', error);
-    res.status(500).json({ error: 'Failed to mark messages as read' });
+    console.error('Error deleting message:', error);
+    res.status(500).json({ error: 'Failed to delete message' });
   }
 });
 
