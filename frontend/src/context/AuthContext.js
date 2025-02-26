@@ -29,6 +29,11 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (user) {
       localStorage.setItem('user', JSON.stringify(user));
+      
+      // If user has openChats, ensure they're saved to localStorage
+      if (user.openChats && Array.isArray(user.openChats)) {
+        localStorage.setItem('openChats', JSON.stringify(user.openChats));
+      }
     } else {
       localStorage.removeItem('user');
     }

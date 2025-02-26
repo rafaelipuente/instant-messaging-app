@@ -7,7 +7,7 @@ import { SOCKET_URL } from '../config';
 import '../styles/Chat.css';
 
 const Chat = () => {
-  const { user, getFullProfilePictureUrl } = useAuth();
+  const { user, getFullProfilePictureUrl, updateOpenChats } = useAuth();
   const [activeChannel, setActiveChannel] = useState('General');
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
@@ -103,6 +103,22 @@ const Chat = () => {
       };
     }
   }, [socket, selectedUser, getFullProfilePictureUrl]);
+
+  useEffect(() => {
+    // Load active chats on component mount
+    const savedOpenChats = localStorage.getItem('openChats');
+    if (savedOpenChats && user) {
+      try {
+        const openChatIds = JSON.parse(savedOpenChats);
+        if (Array.isArray(openChatIds) && openChatIds.length > 0) {
+          // Update auth context with saved open chats
+          updateOpenChats(openChatIds);
+        }
+      } catch (error) {
+        console.error('Error parsing saved open chats:', error);
+      }
+    }
+  }, [user, updateOpenChats]);
 
   const handleChannelChange = (channelId) => {
     const channel = channels.find(c => c.id === channelId);

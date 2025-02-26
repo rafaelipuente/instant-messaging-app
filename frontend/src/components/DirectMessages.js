@@ -7,7 +7,7 @@ import '../styles/DirectMessages.css';
 import UserAvatar from './UserAvatar';
 
 function DirectMessages({ addNotification, addUnreadMessage }) {
-  const { user, updateOpenChats } = useAuth();
+  const { user, updateOpenChats, logout } = useAuth();
   const navigate = useNavigate();
   const [socket, setSocket] = useState(null);
   const [users, setUsers] = useState([]);
@@ -139,10 +139,12 @@ function DirectMessages({ addNotification, addUnreadMessage }) {
         updatedChats.push(newChat);
         setActiveChats(updatedChats);
         
-        // Update open chats in auth context
-        if (updateOpenChats) {
-          updateOpenChats(updatedChats.map(chat => chat._id));
-        }
+        // Update open chats in auth context to persist across navigation
+        const openChatIds = updatedChats.map(chat => chat._id);
+        updateOpenChats(openChatIds);
+        
+        // Store in localStorage for additional persistence
+        localStorage.setItem('openChats', JSON.stringify(openChatIds));
         
         // Fetch messages for the new chat
         fetchUserMessages(newChat._id);
@@ -150,7 +152,7 @@ function DirectMessages({ addNotification, addUnreadMessage }) {
     } catch (error) {
       console.error('Error adding to open chats:', error);
     }
-  }, [user?.token, activeChats, updateOpenChats, fetchUserMessages, SOCKET_URL]);
+  }, [user?.token, activeChats, fetchUserMessages, updateOpenChats, SOCKET_URL]);
 
   // Function to remove a user from open chats
   const removeFromOpenChats = useCallback(async (userId) => {
@@ -172,14 +174,17 @@ function DirectMessages({ addNotification, addUnreadMessage }) {
       const updatedChats = activeChats.filter(chat => chat._id !== userId);
       setActiveChats(updatedChats);
       
-      // If the removed user is the selected user, clear the selection
-      if (selectedUser && selectedUser._id === userId) {
-        setSelectedUser(null);
-      }
+      // Update open chats in auth context to persist across navigation
+      const openChatIds = updatedChats.map(chat => chat._id);
+      updateOpenChats(openChatIds);
+      
+      // Update localStorage
+      localStorage.setItem('openChats', JSON.stringify(openChatIds));
+      
     } catch (error) {
       console.error('Error removing from open chats:', error);
     }
-  }, [user?.token, activeChats, selectedUser, SOCKET_URL]);
+  }, [user?.token, activeChats, updateOpenChats, SOCKET_URL]);
 
   // Function to handle user selection
   const handleUserSelect = async (user) => {
@@ -234,12 +239,29 @@ function DirectMessages({ addNotification, addUnreadMessage }) {
     }
   }, [message, socket, selectedUser]);
 
-  // Initialize socket connection
+  // Initialize socket connection and fetch data
   useEffect(() => {
     if (!user?.token) {
       navigate('/login');
       return;
     }
+
+    // Initialize with open chats from localStorage if available
+    const savedOpenChats = localStorage.getItem('openChats');
+    if (savedOpenChats) {
+      try {
+        const openChatIds = JSON.parse(savedOpenChats);
+        if (Array.isArray(openChatIds) && openChatIds.length > 0) {
+          // Update auth context with saved open chats
+          updateOpenChats(openChatIds);
+        }
+      } catch (error) {
+        console.error('Error parsing saved open chats:', error);
+      }
+    }
+
+    fetchUsers();
+    fetchOpenChats();
 
     const newSocket = io(SOCKET_URL, {
       auth: {
@@ -247,15 +269,17 @@ function DirectMessages({ addNotification, addUnreadMessage }) {
       }
     });
 
-    setSocket(newSocket);
-
-    // Fetch initial data
-    fetchUsers();
-    fetchOpenChats();
+    newSocket.on('connect', () => {
+      console.log('Socket connected');
+      setSocket(newSocket);
+    });
 
     newSocket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
-      navigate('/login');
+      if (error.message === 'Authentication error') {
+        logout();
+        navigate('/login');
+      }
     });
 
     return () => {
@@ -263,7 +287,7 @@ function DirectMessages({ addNotification, addUnreadMessage }) {
         newSocket.close();
       }
     };
-  }, [user?.token, navigate, fetchUsers, fetchOpenChats]);
+  }, [user?.token, navigate, fetchUsers, fetchOpenChats, updateOpenChats]);
 
   // Handle socket events for real-time updates
   useEffect(() => {
@@ -304,6 +328,31 @@ function DirectMessages({ addNotification, addUnreadMessage }) {
           timestamp: message.timestamp,
           read: false
         });
+
+        // Automatically open a DM window for the sender
+        const senderUser = users.find(u => u._id === message.sender._id) || 
+                          activeChats.find(c => c._id === message.sender._id);
+        
+        if (senderUser) {
+          // Add to active chats if not already there
+          if (!activeChats.find(chat => chat._id === senderUser._id)) {
+            addToOpenChats(senderUser._id);
+          }
+        } else {
+          // If we don't have the user info, fetch it and then open the chat
+          fetch(`${SOCKET_URL}/api/users/${message.sender._id}`, {
+            headers: {
+              'Authorization': `Bearer ${user.token}`
+            }
+          })
+          .then(response => response.json())
+          .then(userData => {
+            addToOpenChats(userData._id);
+          })
+          .catch(error => {
+            console.error('Error fetching user data:', error);
+          });
+        }
       }
       
       // Scroll to bottom if the message is in the current chat
