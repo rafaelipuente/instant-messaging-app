@@ -19,7 +19,7 @@ const app = express();
  * 3. MIDDLEWARE
  *****************************************************/
 app.use(cors({
-  origin: 'http://localhost:3000',  // adjust if needed
+  origin: ['http://localhost:3000', 'http://localhost:3001'],  // allow both ports
   credentials: true,
 }));
 app.use(express.json());

@@ -35,6 +35,11 @@ const Login = () => {
       const response = await axios.post(`${API_BASE_URL}/users/login`, {
         username: formData.username.toLowerCase(),
         password: formData.password
+      }, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       console.log('Login response:', response.data);
@@ -50,8 +55,17 @@ const Login = () => {
         throw new Error('Invalid response from server');
       }
     } catch (err) {
-      console.error('Login error:', err.response?.data || err.message);
-      setError(err.response?.data?.error || 'Failed to login. Please try again.');
+      console.error('Login error:', err);
+      if (err.response) {
+        console.error('Error response:', err.response.data);
+        setError(err.response.data.error || 'Failed to login. Please try again.');
+      } else if (err.request) {
+        console.error('Error request:', err.request);
+        setError('Network error. Please check your connection.');
+      } else {
+        console.error('Error message:', err.message);
+        setError(err.message || 'Failed to login. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }

@@ -5,14 +5,31 @@ const User = require('../models/userModel');
 const auth = require('../middleware/auth');
 const path = require('path');
 
+// List all available public channels
+router.get('/channels', auth, async (req, res) => {
+  try {
+    const channels = ['general', 'tech-talk', 'random', 'music'];
+    res.json(channels);
+  } catch (error) {
+    console.error('Error fetching channels:', error);
+    res.status(500).json({ error: 'Failed to fetch channels' });
+  }
+});
+
 // Get messages for a channel with pagination and caching
 router.get('/channel/:channelName', auth, async (req, res) => {
   try {
-    const { channelName } = req.params;
     const { limit = 50, before } = req.query;
+    const channelName = req.params.channelName.toLowerCase();
+    
+    // Validate if it's a public channel
+    const validChannels = ['general', 'tech-talk', 'random', 'music'];
+    if (!validChannels.includes(channelName)) {
+      return res.status(404).json({ error: 'Channel not found' });
+    }
 
     const query = {
-      channel: channelName.toLowerCase(),
+      channel: channelName,
       messageType: 'channel'
     };
 
@@ -98,12 +115,12 @@ router.get('/direct/:userId', auth, async (req, res) => {
 router.post('/channel/:channelName', auth, async (req, res) => {
   try {
     const { content } = req.body;
-    const { channelName } = req.params;
+    const channelName = req.params.channelName.toLowerCase();
 
     const message = new Message({
       sender: req.user._id,
       content,
-      channel: channelName.toLowerCase(),
+      channel: channelName,
       messageType: 'channel'
     });
 

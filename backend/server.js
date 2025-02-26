@@ -5,7 +5,13 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
-const { handleDirectMessage, handleChannelMessage, handleMessageDeletion } = require('./socket/messageHandler');
+const { 
+  handleDirectMessage, 
+  handleChannelMessage, 
+  loadInitialMessages, 
+  handleConnection,
+  handleMessageDeletion 
+} = require('./socket/messageHandler');
 const Message = require('./models/messageModel');
 
 require('dotenv').config();
@@ -24,8 +30,9 @@ mongoose.connect(process.env.MONGODB_URI)
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    methods: ["GET", "POST"]
+    origin: ["http://localhost:3000", "http://localhost:3001"],
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -52,42 +59,70 @@ io.use(async (socket, next) => {
   }
 });
 
+// Track connected users
+const connectedUsers = new Map();
+
 // Socket.io connection handling
 io.on('connection', async (socket) => {
   try {
-    console.log('User connected:', socket.user.username);
+    const userId = socket.user._id.toString();
+    
+    // Check if user is already connected
+    if (connectedUsers.has(userId)) {
+      // Update the socket ID for the user
+      connectedUsers.get(userId).socketId = socket.id;
+      console.log('User reconnected:', socket.user.username);
+    } else {
+      // Add new user connection
+      connectedUsers.set(userId, { 
+        socketId: socket.id,
+        username: socket.user.username
+      });
+      console.log('User connected:', socket.user.username);
 
-    // Join user's personal room for direct messages
-    socket.join(socket.user._id.toString());
+      // Handle initial connection setup
+      await handleConnection(io, socket);
 
-    // Update user status to online
-    await User.findByIdAndUpdate(socket.user._id, { status: 'online' });
-    io.emit('userConnected', { userId: socket.user._id });
+      // Update user status to online
+      await User.findByIdAndUpdate(userId, { status: 'online' });
+      io.emit('userConnected', { 
+        userId: userId,
+        username: socket.user.username,
+        status: 'online'
+      });
+    }
+
+    // Handle loading initial messages
+    socket.on('loadInitialMessages', async (data) => {
+      try {
+        await loadInitialMessages(socket, data);
+      } catch (error) {
+        console.error('Error loading messages:', error);
+        socket.emit('messageError', { error: 'Failed to load messages' });
+      }
+    });
 
     // Handle joining channels
     socket.on('join', async ({ channel }) => {
       try {
-        // Leave previous channel if any
-        if (socket.currentChannel) {
-          socket.leave(socket.currentChannel);
+        const channelName = channel.toLowerCase();
+        
+        // Validate channel
+        const validChannels = ['general', 'tech-talk', 'random', 'music'];
+        if (!validChannels.includes(channelName)) {
+          console.warn(`Invalid channel: ${channelName}`);
+          socket.emit('error', { message: 'Invalid channel' });
+          return;
         }
         
-        // Join new channel
-        socket.join(channel.toLowerCase());
-        socket.currentChannel = channel.toLowerCase();
-
-        // Get previous messages for the channel
-        const messages = await Message.find({
-          channel: channel.toLowerCase(),
-          messageType: 'channel'
-        })
-        .sort({ timestamp: -1 })
-        .limit(50)
-        .populate('sender', 'username profilePicture')
-        .lean();
-
-        // Send previous messages to the user
-        socket.emit('previousMessages', messages.reverse());
+        console.log(`User ${socket.user.username} joining channel: ${channelName}`);
+        socket.join(channelName);
+        
+        // Notify channel about new user
+        socket.to(channelName).emit('userJoinedChannel', {
+          username: socket.user.username,
+          channel: channelName
+        });
       } catch (error) {
         console.error('Error joining channel:', error);
         socket.emit('error', { message: 'Failed to join channel' });
@@ -111,11 +146,23 @@ io.on('connection', async (socket) => {
     // Handle disconnection
     socket.on('disconnect', async () => {
       try {
-        console.log('User disconnected:', socket.user.username);
+        const userId = socket.user._id.toString();
         
-        // Update user status to offline
-        await User.findByIdAndUpdate(socket.user._id, { status: 'offline', lastSeen: new Date() });
-        io.emit('userDisconnected', { userId: socket.user._id });
+        // Check if user has other active connections
+        if (connectedUsers.has(userId) && connectedUsers.get(userId).socketId === socket.id) {
+          // Only remove user if this was their last connection
+          connectedUsers.delete(userId);
+          console.log('User fully disconnected:', socket.user.username);
+          
+          // Update user status to offline
+          await User.findByIdAndUpdate(userId, { 
+            status: 'offline', 
+            lastSeen: new Date() 
+          });
+          io.emit('userDisconnected', { userId: userId });
+        } else {
+          console.log('User still has other active connections:', socket.user.username);
+        }
       } catch (error) {
         console.error('Error handling disconnect:', error);
       }

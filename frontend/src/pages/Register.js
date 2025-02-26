@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import '../styles/Auth.css';
-
-const SOCKET_URL = 'http://localhost:5001';
+import { API_BASE_URL } from '../config';
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -20,11 +19,14 @@ const Register = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${SOCKET_URL}/api/users/register`, {
+      console.log('Attempting to register user:', formData.username);
+      
+      const response = await fetch(`${API_BASE_URL}/users/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(formData),
       });
 
@@ -34,11 +36,13 @@ const Register = () => {
         throw new Error(data.error || 'Registration failed');
       }
 
+      console.log('Registration successful:', data);
+      
       // Store the token and user data
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       
-      // Redirect to chat instead of login
+      // Redirect to chat
       navigate('/chat');
     } catch (error) {
       setError(error.message);

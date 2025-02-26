@@ -200,6 +200,60 @@
   min-width: 0;
 }
 
+/* Message input area */
+.message-input {
+  padding: 15px;
+  border-top: 1px solid #e1e4e8;
+  background-color: white;
+}
+
+.message-input form {
+  display: flex;
+  gap: 10px;
+}
+
+.message-input input {
+  flex-grow: 1;
+  padding: 10px 15px;
+  border: 1px solid #e1e4e8;
+  border-radius: 20px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.message-input input:focus {
+  border-color: #007bff;
+}
+
+.message-input button {
+  padding: 8px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.message-input button:hover {
+  background-color: #0056b3;
+}
+
+.message-input button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.typing-indicator {
+  font-size: 12px;
+  color: #666;
+  margin-top: 5px;
+  padding-left: 5px;
+}
+
 .chat-header {
   padding: 12px 20px;
   border-bottom: 1px solid #e1e4e8;
@@ -378,6 +432,25 @@
   height: 1px;
   background: #e0e0e0;
   margin: 10px 0;
+}
+
+/* Message deletion styles */
+.message.deleting {
+  opacity: 0.5;
+  position: relative;
+}
+
+.message.deleting::after {
+  content: 'Deleting...';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
 }
 
 /* Message deletion animation */

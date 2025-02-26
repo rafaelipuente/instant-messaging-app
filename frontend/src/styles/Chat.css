@@ -719,6 +719,52 @@
   overflow-y: auto;
 }
 
+/* Message deletion styles */
+.message.deleting {
+  opacity: 0.5;
+  position: relative;
+}
+
+.message.deleting::after {
+  content: 'Deleting...';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.delete-message-btn {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 0.8rem;
+  margin-left: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.message:hover .delete-message-btn {
+  opacity: 1;
+}
+
+.delete-message-btn:hover {
+  color: #ff4d4d;
+}
+
+.message-timestamp {
+  display: flex;
+  align-items: center;
+  font-size: 0.75rem;
+  color: #999;
+  margin-top: 4px;
+}
+
 @media (max-width: 768px) {
   .chat-container {
     margin: 0;

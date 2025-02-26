@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
+import { Toaster } from 'react-hot-toast';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
 import Chat from './Chat';
@@ -31,6 +32,7 @@ const App = () => {
       <ThemeProvider>
         <Router>
           <div className="app">
+            <Toaster />
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />

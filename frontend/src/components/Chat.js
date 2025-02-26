@@ -1,20 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Navbar from './Navbar';
 import DirectMessages from './DirectMessages';
 import io from 'socket.io-client';
+import toast from 'react-hot-toast';
 import { SOCKET_URL } from '../config';
 import '../styles/Chat.css';
 
 const Chat = () => {
   const { user, getFullProfilePictureUrl, updateOpenChats } = useAuth();
-  const [activeChannel, setActiveChannel] = useState('General');
+  const [activeChannel, setActiveChannel] = useState('general');
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const [socket, setSocket] = useState(null);
   const [typing, setTyping] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showDMs, setShowDMs] = useState(false);
+  const [notifications, setNotifications] = useState({}); // Add notifications state
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
@@ -25,15 +27,37 @@ const Chat = () => {
     { id: 'music', name: 'Music', icon: '🎵' }
   ];
 
+  // Function to add notification
+  const addNotification = (channel) => {
+    if (channel !== activeChannel) {
+      setNotifications(prev => ({
+        ...prev,
+        [channel]: (prev[channel] || 0) + 1
+      }));
+    }
+  };
+
   useEffect(() => {
     if (user && user.token) {
       const newSocket = io(SOCKET_URL, {
-        auth: { token: user.token }
+        auth: { token: user.token },
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: 5
       });
 
       newSocket.on('connect', () => {
         console.log('Socket connected');
         setSocket(newSocket);
+        
+        // Load messages for the initial channel
+        setTimeout(() => {
+          newSocket.emit('loadInitialMessages', { channel: activeChannel });
+        }, 500);
+      });
+
+      newSocket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
       });
 
       return () => {
@@ -42,40 +66,99 @@ const Chat = () => {
         }
       };
     }
-  }, [user]);
+  }, [user, activeChannel]);
 
   useEffect(() => {
-    if (socket && activeChannel) {
-      socket.emit('join', { channel: activeChannel });
+    if (!socket || !activeChannel) return;
 
-      socket.on('previousMessages', (messages) => {
-        setMessages(messages);
+    const normalizedChannel = activeChannel.toLowerCase().replace(' ', '-');
+    console.log(`Joining channel: ${normalizedChannel}`);
+    
+    // Join channel and request messages
+    socket.emit('join', { channel: normalizedChannel });
+    socket.emit('loadInitialMessages', { channel: normalizedChannel });
+
+    const handlePreviousMessages = (messages) => {
+      setMessages(messages);
+      setTimeout(scrollToBottom, 0);
+    };
+
+    const handleNewMessage = (message) => {
+      setMessages(prevMessages => [...prevMessages, message]);
+      setTimeout(scrollToBottom, 0);
+    };
+
+    const handleTyping = ({ username }) => {
+      if (username !== user.username) {
+        setTyping(username);
+      }
+    };
+
+    const handleStopTyping = () => {
+      setTyping(null);
+    };
+
+    // Set up event listeners
+    socket.on('previousMessages', handlePreviousMessages);
+    socket.on('newChannelMessage', handleNewMessage);
+    socket.on('userTyping', handleTyping);
+    socket.on('userStopTyping', handleStopTyping);
+
+    return () => {
+      socket.off('previousMessages', handlePreviousMessages);
+      socket.off('newChannelMessage', handleNewMessage);
+      socket.off('userTyping', handleTyping);
+      socket.off('userStopTyping', handleStopTyping);
+    };
+  }, [socket, activeChannel, user?.username]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleMessageReceived = (message) => {
+      if (message.channel === activeChannel.toLowerCase()) {
+        setMessages((prevMessages) => [...prevMessages, message]);
         setTimeout(scrollToBottom, 0);
-      });
+      } else {
+        // Handle notification for messages in other channels
+        addNotification(message.channel);
+      }
+    };
 
-      socket.on('newChannelMessage', (message) => {
-        setMessages(prevMessages => [...prevMessages, message]);
-        setTimeout(scrollToBottom, 0);
-      });
+    const handleMessageDeleted = ({ messageId }) => {
+      console.log('Message deleted:', messageId);
+      setMessages(prev => prev.filter(msg => msg._id !== messageId));
+    };
 
-      socket.on('userTyping', ({ username }) => {
-        if (username !== user.username) {
-          setTyping(username);
-        }
-      });
+    const handleMessageDeleteSuccess = ({ messageId }) => {
+      console.log('Message delete success:', messageId);
+      // Message already marked as deleted in the handleMessageDeleted handler
+    };
 
-      socket.on('userStopTyping', () => {
-        setTyping(null);
-      });
+    const handleMessageError = ({ error }) => {
+      console.error('Message error:', error);
+      // Revert any messages marked as deleting
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.isDeleting ? { ...msg, isDeleting: false } : msg
+        )
+      );
+      // Show error to user
+      toast.error(error || 'An error occurred with your message');
+    };
 
-      return () => {
-        socket.off('previousMessages');
-        socket.off('newChannelMessage');
-        socket.off('userTyping');
-        socket.off('userStopTyping');
-      };
-    }
-  }, [socket, activeChannel, user.username]);
+    socket.on('message', handleMessageReceived);
+    socket.on('messageDeleted', handleMessageDeleted);
+    socket.on('messageDeleteSuccess', handleMessageDeleteSuccess);
+    socket.on('messageError', handleMessageError);
+
+    return () => {
+      socket.off('message');
+      socket.off('messageDeleted');
+      socket.off('messageDeleteSuccess');
+      socket.off('messageError');
+    };
+  }, [socket, activeChannel, addNotification]);
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
@@ -123,9 +206,9 @@ const Chat = () => {
   const handleChannelChange = (channelId) => {
     const channel = channels.find(c => c.id === channelId);
     if (channel) {
-      setActiveChannel(channel.name);
-      setMessages([]);
       setShowDMs(false);
+      setActiveChannel(channel.name);
+      // Messages will be loaded in the useEffect when activeChannel changes
     }
   };
 
@@ -166,6 +249,36 @@ const Chat = () => {
     setSelectedUser(null);
   };
 
+  const handleDeleteMessage = useCallback(async (messageId) => {
+    try {
+      if (window.confirm('Are you sure you want to delete this message?')) {
+        console.log('Deleting message:', messageId);
+        
+        // Mark message as deleting for visual feedback
+        setMessages(prev => 
+          prev.map(msg => 
+            msg._id === messageId 
+              ? { ...msg, isDeleting: true } 
+              : msg
+          )
+        );
+        
+        // Send deletion request
+        socket.emit('deleteMessage', { messageId });
+      }
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      // Revert deleting status if there's an error
+      setMessages(prev => 
+        prev.map(msg => 
+          msg._id === messageId 
+            ? { ...msg, isDeleting: false } 
+            : msg
+        )
+      );
+    }
+  }, [socket]);
+
   return (
     <div className="chat-container">
       <Navbar />
@@ -196,7 +309,11 @@ const Chat = () => {
         </div>
 
         {showDMs ? (
-          <DirectMessages socket={socket} />
+          <DirectMessages 
+            socketProp={socket} 
+            addNotification={(notification) => addNotification(notification)} // Update addNotification reference
+            addUnreadMessage={(userId, messageId) => console.log('Unread message:', userId, messageId)} 
+          />
         ) : (
           <div className="chat-main">
             <div className="chat-header">
@@ -207,7 +324,7 @@ const Chat = () => {
               {messages.map((msg, index) => (
                 <div
                   key={msg._id || index}
-                  className={`message ${msg.sender.username === user.username ? 'sent' : 'received'}`}
+                  className={`message ${msg.sender.username === user.username ? 'sent' : 'received'} ${msg.isDeleting ? 'deleting' : ''}`}
                 >
                   <div className="message-wrapper">
                     <div className="message-header">
@@ -225,7 +342,21 @@ const Chat = () => {
                         })}
                       </span>
                     </div>
-                    <div className="message-content">{msg.content}</div>
+                    <div className="message-content">
+                      <div className="message-text">{msg.content}</div>
+                      <div className="message-timestamp">
+                        {new Date(msg.timestamp).toLocaleTimeString()}
+                        {msg.sender._id === user._id && (
+                          <button 
+                            className="delete-message-btn"
+                            onClick={() => handleDeleteMessage(msg._id)}
+                            aria-label="Delete message"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}

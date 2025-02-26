@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 const path = require('path');
 
+// Constants for valid channels
+const VALID_CHANNELS = ['general', 'tech-talk', 'random', 'music'];
+
 const messageSchema = new mongoose.Schema({
   sender: {
     type: mongoose.Schema.Types.ObjectId,
@@ -41,6 +44,37 @@ const messageSchema = new mongoose.Schema({
 // Create compound indexes for efficient retrieval
 messageSchema.index({ channel: 1, timestamp: -1 });
 messageSchema.index({ sender: 1, receiver: 1, timestamp: -1 });
+messageSchema.index({ messageType: 1, channel: 1, timestamp: -1 });
+
+// Validate channel names
+messageSchema.pre('save', function(next) {
+  if (this.messageType === 'channel') {
+    this.channel = this.channel.toLowerCase();
+    if (!VALID_CHANNELS.includes(this.channel)) {
+      next(new Error('Invalid channel name'));
+      return;
+    }
+  }
+  next();
+});
+
+// Add static method to fetch channel messages
+messageSchema.statics.getChannelMessages = async function(channel, limit = 50, before = null) {
+  const query = {
+    channel: channel.toLowerCase(),
+    messageType: 'channel'
+  };
+
+  if (before) {
+    query.timestamp = { $lt: new Date(before) };
+  }
+
+  return this.find(query)
+    .sort({ timestamp: -1 })
+    .limit(parseInt(limit))
+    .populate('sender', 'username profilePicture')
+    .lean();
+};
 
 // Virtual for populating user details
 messageSchema.virtual('senderDetails', {

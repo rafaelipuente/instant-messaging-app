@@ -4,6 +4,15 @@ const auth = require('../middleware/auth');
 const DirectMessage = require('../models/directMessageModel');
 const User = require('../models/userModel');
 
+// Validate user exists
+const validateUser = async (userId) => {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new Error('User not found');
+  }
+  return user;
+};
+
 // Start or get a conversation
 router.post('/start', auth, async (req, res) => {
   try {
@@ -12,6 +21,14 @@ router.post('/start', auth, async (req, res) => {
 
     if (userId === otherUserId) {
       return res.status(400).json({ message: "Cannot start chat with yourself" });
+    }
+
+    // Validate both users exist
+    try {
+      await validateUser(userId);
+      await validateUser(otherUserId);
+    } catch (error) {
+      return res.status(404).json({ message: error.message });
     }
 
     // Check if conversation already exists
