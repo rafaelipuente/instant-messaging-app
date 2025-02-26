@@ -6,7 +6,7 @@ import io from 'socket.io-client';
 import '../styles/DirectMessages.css';
 import UserAvatar from './UserAvatar';
 
-function DirectMessages() {
+function DirectMessages({ addNotification, addUnreadMessage }) {
   const { user, updateOpenChats } = useAuth();
   const navigate = useNavigate();
   const [socket, setSocket] = useState(null);
@@ -270,20 +270,47 @@ function DirectMessages() {
     if (!socket || !user) return;
 
     const handleNewMessage = (message) => {
-      const otherUserId = message.sender._id === user._id ? message.receiver._id : message.sender._id;
+      console.log('Received new direct message:', message);
       
-      setMessages(prev => ({
-        ...prev,
-        [otherUserId]: [...(prev[otherUserId] || []), message]
-      }));
+      // Add message to state
+      setMessages(prev => {
+        const userId = message.sender._id === user._id ? message.receiver._id : message.sender._id;
+        const userMessages = [...(prev[userId] || [])];
+        
+        // Only add if not already in the list
+        if (!userMessages.find(msg => msg._id === message._id)) {
+          userMessages.push(message);
+        }
+        
+        return {
+          ...prev,
+          [userId]: userMessages
+        };
+      });
 
-      if (selectedUser && otherUserId === selectedUser._id) {
-        setTimeout(scrollToBottom, 0);
+      // Create notification if message is from someone else and not the currently selected user
+      if (message.sender._id !== user._id && (!selectedUser || selectedUser._id !== message.sender._id)) {
+        // Add to unread messages
+        addUnreadMessage(message.sender._id, message._id);
+        
+        // Create notification
+        addNotification({
+          id: message._id,
+          type: 'directMessage',
+          senderId: message.sender._id,
+          sender: message.sender.username,
+          senderAvatar: message.sender.profilePicture,
+          message: `${message.sender.username} sent you a message: ${message.content.substring(0, 30)}${message.content.length > 30 ? '...' : ''}`,
+          timestamp: message.timestamp,
+          read: false
+        });
       }
-
-      // Add sender to open chats if not already there
-      if (message.sender._id !== user._id) {
-        addToOpenChats(message.sender._id);
+      
+      // Scroll to bottom if the message is in the current chat
+      if (selectedUser && 
+          ((message.sender._id === selectedUser._id && message.receiver._id === user._id) || 
+           (message.sender._id === user._id && message.receiver._id === selectedUser._id))) {
+        setTimeout(scrollToBottom, 0);
       }
     };
 
@@ -356,7 +383,7 @@ function DirectMessages() {
       socket.off('stopTyping');
       socket.off('messageError');
     };
-  }, [socket, user, selectedUser, addToOpenChats, scrollToBottom, fetchUsers]);
+  }, [socket, user, selectedUser, addToOpenChats, scrollToBottom, fetchUsers, addNotification, addUnreadMessage]);
 
   return (
     <div className="direct-messages">

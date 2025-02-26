@@ -23,6 +23,8 @@ export const AuthProvider = ({ children }) => {
     const savedUser = localStorage.getItem('user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
+  const [notifications, setNotifications] = useState([]);
+  const [unreadMessages, setUnreadMessages] = useState({});
 
   useEffect(() => {
     if (user) {
@@ -56,6 +58,8 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     try {
       setUser(null);
+      setNotifications([]);
+      setUnreadMessages({});
     } catch (error) {
       console.error('Error in logout:', error);
     }
@@ -89,6 +93,37 @@ export const AuthProvider = ({ children }) => {
     }));
   };
 
+  const addNotification = (notification) => {
+    setNotifications(prev => [notification, ...prev]);
+  };
+
+  const clearNotifications = () => {
+    setNotifications([]);
+  };
+
+  const markNotificationAsRead = (notificationId) => {
+    setNotifications(prev => 
+      prev.map(notif => 
+        notif.id === notificationId ? { ...notif, read: true } : notif
+      )
+    );
+  };
+
+  const addUnreadMessage = (senderId, messageId) => {
+    setUnreadMessages(prev => ({
+      ...prev,
+      [senderId]: [...(prev[senderId] || []), messageId]
+    }));
+  };
+
+  const clearUnreadMessages = (senderId) => {
+    setUnreadMessages(prev => {
+      const newState = { ...prev };
+      delete newState[senderId];
+      return newState;
+    });
+  };
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -116,7 +151,14 @@ export const AuthProvider = ({ children }) => {
     updateUser,
     updateOpenChats,
     loading,
-    getFullProfilePictureUrl
+    getFullProfilePictureUrl,
+    notifications,
+    addNotification,
+    clearNotifications,
+    markNotificationAsRead,
+    unreadMessages,
+    addUnreadMessage,
+    clearUnreadMessages
   };
 
   if (loading) {

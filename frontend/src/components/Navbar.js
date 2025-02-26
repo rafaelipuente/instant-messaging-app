@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import NotificationBell from './NotificationBell';
 import '../styles/Navbar.css';
 
 const Navbar = () => {
@@ -54,6 +55,7 @@ const Navbar = () => {
               >
                 Messages
               </Link>
+              <NotificationBell />
               <div className="profile-menu">
                 <button className="profile-button" onClick={toggleProfileMenu}>
                   <span>{user.username}</span>
