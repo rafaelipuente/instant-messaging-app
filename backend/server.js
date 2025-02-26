@@ -128,6 +128,25 @@ io.on('connection', async (socket) => {
         socket.emit('error', { message: 'Failed to join channel' });
       }
     });
+    
+    // Handle joining rooms (for public chat rooms)
+    socket.on('join room', (room) => {
+      socket.join(room);
+      console.log(`User ${socket.user.username} joined room: ${room}`);
+    });
+    
+    // Handle chat messages for rooms
+    socket.on('chat message', (msg) => {
+      io.to(msg.room).emit('chat message', msg);
+      const message = new Message({ 
+        content: msg.content, 
+        room: msg.room,
+        sender: socket.user._id,
+        messageType: 'channel',
+        channel: msg.room
+      });
+      message.save().then(() => console.log('Message saved to room:', msg.room));
+    });
 
     // Handle direct messages
     socket.on('directMessage', (data) => handleDirectMessage(io, socket, data));

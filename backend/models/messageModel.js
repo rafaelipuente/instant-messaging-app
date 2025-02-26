@@ -36,6 +36,13 @@ const messageSchema = new mongoose.Schema({
     type: String,
     enum: ['direct', 'channel'],
     required: true
+  },
+  // Room field for public chat rooms
+  room: {
+    type: String,
+    required: function() {
+      return this.messageType === 'channel';
+    }
   }
 }, {
   timestamps: true
