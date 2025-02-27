@@ -4,7 +4,7 @@ import Navbar from './Navbar';
 import DirectMessages from './DirectMessages';
 import io from 'socket.io-client';
 import toast from 'react-hot-toast';
-import { SOCKET_URL } from '../config';
+import { SOCKET_URL, API_BASE_URL } from '../config';
 import '../styles/Chat.css';
 
 const Chat = () => {
@@ -19,6 +19,13 @@ const Chat = () => {
   const [notifications, setNotifications] = useState({}); // Add notifications state
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+
+  // Define scrollToBottom function early
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+    }
+  }, []);
 
   const channels = [
     { id: 'general', name: 'General', icon: '🌐' },
@@ -180,17 +187,37 @@ const Chat = () => {
     return () => {
       socket.off('chat message', handleChatMessage);
     };
-  }, [socket, activeChannel]);
+  }, [socket, activeChannel, scrollToBottom]);
 
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
-    }
-  };
+  useEffect(() => {
+    if (!socket || !user) return;
+    
+    // Handle direct message reception
+    const handleDirectMessage = (msg) => {
+      if (msg.receiver === user._id || msg.sender === user._id) {
+        setMessages((prev) => [...prev, msg]);
+        scrollToBottom();
+        
+        // Add notification if not in the current conversation
+        if (showDMs && selectedUser && 
+            ((msg.sender !== user._id && msg.sender !== selectedUser._id) || 
+             (msg.receiver !== user._id && msg.receiver !== selectedUser._id))) {
+          // Add notification logic here
+          toast.success(`New message from ${msg.senderUsername || 'someone'}`);
+        }
+      }
+    };
+    
+    socket.on('direct message', handleDirectMessage);
+    
+    return () => {
+      socket.off('direct message', handleDirectMessage);
+    };
+  }, [socket, user, showDMs, selectedUser]);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, scrollToBottom]);
 
   useEffect(() => {
     if (socket) {
@@ -322,6 +349,39 @@ const Chat = () => {
       );
     }
   }, [socket]);
+
+  // Function to send direct messages
+  const sendDirectMessage = async (receiver) => {
+    if (!message.trim() || !socket || !user) return;
+    
+    const msg = { 
+      sender: user._id, 
+      receiver, 
+      content: message, 
+      messageType: 'direct' 
+    };
+    
+    try {
+      // Send to API
+      await fetch(`${API_BASE_URL}/direct-messages`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`
+        },
+        body: JSON.stringify(msg),
+      });
+      
+      // Emit to socket
+      socket.emit('direct message', msg);
+      
+      // Clear input
+      setMessage('');
+    } catch (error) {
+      console.error('Error sending direct message:', error);
+      toast.error('Failed to send message');
+    }
+  };
 
   return (
     <div className="chat-container">

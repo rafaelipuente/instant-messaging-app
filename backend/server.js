@@ -19,6 +19,19 @@ require('dotenv').config();
 const app = require('./app');
 const User = require('./models/userModel');
 
+// Global error handlers for stability
+process.on('uncaughtException', (error) => {
+  console.error('UNCAUGHT EXCEPTION! Shutting down...', error);
+  console.error(error.name, error.message, error.stack);
+  // Keep the process alive but log the error
+});
+
+process.on('unhandledRejection', (error) => {
+  console.error('UNHANDLED REJECTION!', error);
+  console.error(error.name, error.message, error.stack);
+  // Keep the process alive but log the error
+});
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
@@ -131,21 +144,67 @@ io.on('connection', async (socket) => {
     
     // Handle joining rooms (for public chat rooms)
     socket.on('join room', (room) => {
-      socket.join(room);
-      console.log(`User ${socket.user.username} joined room: ${room}`);
+      try {
+        if (!room) {
+          console.warn(`[JOIN ROOM] Invalid room name: ${room}`);
+          socket.emit('error', { message: 'Invalid room name' });
+          return;
+        }
+        
+        // Validate room name
+        const validRooms = ['general', 'tech-talk', 'random', 'music'];
+        if (!validRooms.includes(room.toLowerCase())) {
+          console.warn(`[JOIN ROOM] User ${socket.user.username} attempted to join invalid room: ${room}`);
+          socket.emit('error', { message: 'Invalid room name' });
+          return;
+        }
+        
+        // Join the room
+        socket.join(room);
+        console.log(`[JOIN ROOM] User ${socket.user.username} joined room: ${room}`);
+        
+        // Notify other users in the room
+        socket.to(room).emit('user joined', {
+          username: socket.user.username,
+          userId: socket.user._id,
+          room: room
+        });
+      } catch (error) {
+        console.error('[JOIN ROOM] Error joining room:', error);
+        socket.emit('error', { message: 'Failed to join room' });
+      }
     });
     
     // Handle chat messages for rooms
-    socket.on('chat message', (msg) => {
-      io.to(msg.room).emit('chat message', msg);
-      const message = new Message({ 
-        content: msg.content, 
-        room: msg.room,
-        sender: socket.user._id,
-        messageType: 'channel',
-        channel: msg.room
-      });
-      message.save().then(() => console.log('Message saved to room:', msg.room));
+    socket.on('chat message', async (msg) => {
+      try {
+        console.log(`[CHAT MESSAGE] User ${socket.user.username} sent message to room: ${msg.room}`);
+        
+        // Broadcast message to room
+        io.to(msg.room).emit('chat message', {
+          ...msg,
+          sender: {
+            _id: socket.user._id,
+            username: socket.user.username
+          },
+          timestamp: new Date()
+        });
+        
+        // Save message to database
+        const message = new Message({ 
+          content: msg.content, 
+          room: msg.room,
+          sender: socket.user._id,
+          messageType: 'channel',
+          channel: msg.room
+        });
+        
+        await message.save();
+        console.log(`[CHAT MESSAGE] Message saved to room: ${msg.room}`);
+      } catch (error) {
+        console.error('[CHAT MESSAGE] Error saving message:', error);
+        socket.emit('error', { message: 'Failed to save message' });
+      }
     });
 
     // Handle direct messages

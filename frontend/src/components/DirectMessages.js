@@ -267,38 +267,70 @@ function DirectMessages({ addNotification, addUnreadMessage, socketProp }) {
   }, [socket, selectedUser, typingTimeout, user]);
 
   // Function to handle sending a message
-  const handleSendMessage = useCallback((e) => {
+  const handleSendMessage = useCallback(async (e) => {
     e.preventDefault();
     if (message.trim() && socket && selectedUser) {
       console.log('Sending direct message to:', selectedUser._id);
       
-      // Emit the message through socket
-      socket.emit('directMessage', {
-        content: message.trim(),
-        receiverId: selectedUser._id
-      });
-      
-      // Add message to state immediately for better UX
-      const newMessage = {
-        _id: Date.now().toString(), // Temporary ID until server responds
-        content: message.trim(),
-        sender: {
-          _id: user._id,
-          username: user.username,
-          profilePicture: user.profilePicture
-        },
-        receiver: {
-          _id: selectedUser._id,
-          username: selectedUser.username,
-          profilePicture: selectedUser.profilePicture
-        },
-        timestamp: new Date(),
-        messageType: 'direct'
-      };
-      
-      setMessages(prev => [...prev, newMessage]);
-      setMessage('');
-      setTimeout(scrollToBottom, 0);
+      try {
+        // Create message object
+        const msg = {
+          sender: user._id,
+          receiver: selectedUser._id,
+          content: message.trim(),
+          messageType: 'direct'
+        };
+        
+        // Add message to state immediately for better UX
+        const newMessage = {
+          _id: Date.now().toString(), // Temporary ID until server responds
+          content: message.trim(),
+          sender: {
+            _id: user._id,
+            username: user.username,
+            profilePicture: user.profilePicture
+          },
+          receiver: {
+            _id: selectedUser._id,
+            username: selectedUser.username,
+            profilePicture: selectedUser.profilePicture
+          },
+          timestamp: new Date(),
+          messageType: 'direct',
+          pending: true // Mark as pending until confirmed
+        };
+        
+        setMessages(prev => [...prev, newMessage]);
+        
+        // Send to API
+        const response = await fetch(`${SOCKET_URL}/api/direct-messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${user.token}`
+          },
+          body: JSON.stringify(msg),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to send message');
+        }
+        
+        // Emit to socket
+        socket.emit('directMessage', {
+          content: message.trim(),
+          receiverId: selectedUser._id
+        });
+        
+        setMessage('');
+        setTimeout(scrollToBottom, 0);
+      } catch (error) {
+        console.error('Error sending direct message:', error);
+        toast.error('Failed to send message');
+        
+        // Remove the pending message from the UI
+        setMessages(prev => prev.filter(msg => !msg.pending));
+      }
     }
   }, [message, socket, selectedUser, user, scrollToBottom]);
 
