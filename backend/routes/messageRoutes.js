@@ -1,151 +1,115 @@
 const express = require('express');
-const router = express.Router();
-const { Message, VALID_CHANNELS } = require('../models/messageModel');
-const User = require('../models/userModel');
-const Conversation = require('../models/channelModel');
-const auth = require('../middleware/auth');
+const mongoose = require('mongoose');
 const path = require('path');
+const router = express.Router();
+const auth = require('../middleware/auth');
+const { Message, VALID_CHANNELS } = require('../models/messageModel');
+const Conversation = require('../models/channelModel');
+const User = require('../models/userModel');
 
 /**
- * MESSAGE ROUTES
- * --------------
- * This file handles both public channel messages and direct messages.
- * Routes are organized in two sections:
- * 1. Public Channel Routes - for group conversations
- * 2. Direct Message Routes - for 1-on-1 messaging
- */
-
-//===================================================================
-// PUBLIC CHANNEL ROUTES
-//===================================================================
-
-/**
- * List all available public channels
- * @route GET /api/messages/channels
- * @auth Required
- * @returns {Array} List of valid channel names
- */
-router.get('/channels', auth, async (req, res) => {
-  try {
-    res.json(VALID_CHANNELS);
-  } catch (error) {
-    console.error('Error fetching channels:', error);
-    res.status(500).json({ error: 'Failed to fetch channels' });
-  }
-});
-
-/**
- * Get messages for a specific channel with pagination
+ * Get all messages for a channel
  * @route GET /api/messages/channel/:channelName
  * @auth Required
- * @param {string} channelName - Name of the channel (lowercase)
- * @query {number} limit - Max number of messages to return (default: 50)
- * @query {string} before - Timestamp to paginate before
- * @returns {Array} Channel messages
+ * @param {string} channelName - Channel name
+ * @returns {Array} Messages
  */
 router.get('/channel/:channelName', auth, async (req, res) => {
   try {
+    const { channelName } = req.params;
     const { limit = 50, before } = req.query;
-    const channelName = req.params.channelName.toLowerCase();
     
-    // Validate if it's a public channel
     if (!VALID_CHANNELS.includes(channelName)) {
-      return res.status(404).json({ error: 'Channel not found' });
+      return res.status(400).json({ error: 'Invalid channel name' });
     }
-
-    // Query conditions
-    const queryConditions = {
-      channel: channelName,
-      messageType: 'channel'
+    
+    let query = { 
+      channel: channelName.toLowerCase(),
+      isDeleted: false
     };
     
-    // Add before condition if provided
+    // If before timestamp is provided, get messages before that time
     if (before) {
-      queryConditions.createdAt = { $lt: new Date(before) };
+      query.createdAt = { $lt: new Date(before) };
     }
     
-    // Find messages and populate sender
-    const messages = await Message.find(queryConditions)
+    const messages = await Message.find(query)
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
+      .limit(Number(limit))
       .populate('sender', 'username profilePicture status')
       .lean();
-      
-    // Transform messages for client
-    const transformedMessages = messages.map(message => ({
-      _id: message._id,
-      content: message.content,
-      sender: {
-        _id: message.sender._id,
-        username: message.sender.username,
-        profilePicture: message.sender.profilePicture ? 
-          `/uploads/${path.basename(message.sender.profilePicture)}` : null,
-        status: message.sender.status
-      },
-      channel: message.channel,
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt
-    }));
     
-    res.json(transformedMessages.reverse());
+    // Format messages for client
+    const formattedMessages = messages.map(msg => {
+      const sender = msg.sender || { username: 'Unknown' };
+      
+      return {
+        _id: msg._id,
+        content: msg.content,
+        timestamp: msg.createdAt,
+        sender: {
+          _id: sender._id,
+          username: sender.username,
+          profilePicture: sender.profilePicture ? 
+            `/uploads/${path.basename(sender.profilePicture)}` : null,
+          status: sender.status
+        },
+        channel: msg.channel,
+        isDeleted: msg.isDeleted
+      };
+    });
+    
+    res.json(formattedMessages);
   } catch (error) {
-    console.error('Error fetching channel messages:', error);
-    res.status(500).json({ error: 'Failed to fetch messages' });
+    console.error('Error getting channel messages:', error);
+    res.status(500).json({ error: 'Failed to get messages' });
   }
 });
 
-//===================================================================
-// DIRECT MESSAGE ROUTES
-//===================================================================
-
 /**
- * Get all direct message conversations for the current user
+ * Get direct message conversations
  * @route GET /api/messages/direct/conversations
  * @auth Required
- * @returns {Array} List of direct message conversations
+ * @returns {Array} Conversations
  */
 router.get('/direct/conversations', auth, async (req, res) => {
   try {
     const userId = req.user._id;
     
-    // Get user with populated conversations
-    const user = await User.findById(userId)
-      .populate({
-        path: 'conversations.conversationId',
-        match: { type: 'direct' },
-        populate: {
-          path: 'participants',
-          select: 'username profilePicture status lastSeen'
+    // Find all direct conversations where the user is a participant
+    const conversations = await Conversation.find({
+      type: 'direct',
+      participants: userId
+    }).populate('participants', 'username profilePicture status');
+    
+    // Format conversations for client
+    const formattedConversations = conversations.map(convo => {
+      // Find the other participant
+      const otherUser = convo.participants.find(
+        p => p._id.toString() !== userId.toString()
+      );
+      
+      if (!otherUser) return null;
+      
+      return {
+        _id: convo._id,
+        name: convo.name,
+        type: convo.type,
+        lastActivity: convo.lastActivity,
+        otherUser: {
+          _id: otherUser._id,
+          username: otherUser.username,
+          profilePicture: otherUser.profilePicture ? 
+            `/uploads/${path.basename(otherUser.profilePicture)}` : null,
+          status: otherUser.status
         }
-      });
+      };
+    }).filter(Boolean);
     
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    // Format conversations for response
-    const conversations = user.conversations
-      .filter(conv => conv.conversationId && conv.conversationId.type === 'direct')
-      .map(conv => {
-        const conversation = conv.conversationId;
-        const otherUser = conversation.participants.find(p => 
-          !p._id.equals(userId)
-        );
-        
-        return {
-          _id: conversation._id,
-          name: conversation.name,
-          displayName: `Chat with ${otherUser?.username || 'Unknown'}`,
-          otherUser: otherUser || null,
-          unreadCount: conv.unreadCount,
-          lastViewedAt: conv.lastViewedAt
-        };
-      });
-    
-    res.json(conversations);
+    res.json(formattedConversations);
   } catch (error) {
-    console.error('Error fetching conversations:', error);
-    res.status(500).json({ error: 'Failed to fetch conversations' });
+    console.error('Error getting direct message conversations:', error);
+    res.status(500).json({ error: 'Failed to get conversations' });
   }
 });
 
@@ -178,7 +142,9 @@ router.post('/direct/:userId', auth, async (req, res) => {
       conversation = new Conversation({
         type: 'direct',
         participants: [senderId, receiverId],
-        name: `direct-${senderId}-${receiverId}`
+        name: `direct-${senderId}-${receiverId}`,
+        displayName: 'Direct Message', // Add required displayName
+        createdBy: senderId // Add required createdBy
       });
       await conversation.save();
 

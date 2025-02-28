@@ -20,6 +20,9 @@ const {
 // Import models
 const { Message } = require('./models/messageModel');
 
+// Import authentication middleware
+const { socketAuth } = require('./middleware/auth');
+
 require('dotenv').config();
 
 const app = require('./app');
@@ -56,27 +59,7 @@ const io = socketIo(server, {
 });
 
 // Socket.io middleware for authentication
-io.use(async (socket, next) => {
-  try {
-    const token = socket.handshake.auth.token;
-    if (!token) {
-      return next(new Error('Authentication error'));
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded._id).select('-password');
-    
-    if (!user) {
-      return next(new Error('User not found'));
-    }
-
-    socket.user = user;
-    next();
-  } catch (error) {
-    console.error('Socket authentication error:', error);
-    next(new Error('Authentication error'));
-  }
-});
+io.use(socketAuth);
 
 // Track connected users
 const connectedUsers = new Map();

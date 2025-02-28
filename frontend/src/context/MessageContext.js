@@ -58,10 +58,14 @@ export const MessageProvider = ({ children }) => {
         
         console.log(`Emitting loadInitialMessages for channel: ${conversationId}`);
         
+        // Ensure we're sending the channel name as a string
+        // This is crucial for proper message loading on the server
+        const channelName = typeof conversationId === 'string' ? conversationId : String(conversationId);
+        
         emitEvent('loadInitialMessages', {
           type: 'channel',
-          channel: conversationId,
-          id: conversationId
+          channel: channelName,
+          id: channelName
         });
       } else if (type === 'direct') {
         // Handle direct messages - use id
@@ -225,14 +229,19 @@ export const MessageProvider = ({ children }) => {
         );
       }
       
-      // Add the new message
-      return [...prev, newMessage];
+      // Ensure messages are in chronological order
+      const updatedMessages = [...prev, newMessage];
+      return updatedMessages.sort((a, b) => {
+        const timeA = new Date(a.timestamp || a.createdAt);
+        const timeB = new Date(b.timestamp || b.createdAt);
+        return timeA - timeB;
+      });
     });
     
     // Handle unread count if this is for a different conversation
     if (messageType === 'channel' && 
         activeConversation && 
-        newMessage.channel !== (activeConversation.id || activeConversation._id)) {
+        newMessage.channel !== (activeConversation.id || activeConversation._id || activeConversation.name)) {
       setUnreadMessages(prev => ({
         ...prev,
         [newMessage.channel]: (prev[newMessage.channel] || 0) + 1
@@ -261,13 +270,19 @@ export const MessageProvider = ({ children }) => {
   const handleInitialMessages = useCallback((data) => {
     console.log('Received initial messages:', data);
     if (data && data.messages && Array.isArray(data.messages)) {
-      setMessages(data.messages);
+      // Ensure messages are sorted by timestamp
+      const sortedMessages = [...data.messages].sort((a, b) => {
+        const timeA = new Date(a.timestamp || a.createdAt);
+        const timeB = new Date(b.timestamp || b.createdAt);
+        return timeA - timeB;
+      });
+      
+      setMessages(sortedMessages);
       setLoading(false);
       
       // Update active conversation if needed
       if (data.type && data.type === conversationType) {
         // This is a confirmation that we're in the right conversation
-        // If needed, you can update UI elements here
         console.log('Received messages for the active conversation type:', data.type);
       }
     } else {

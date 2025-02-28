@@ -45,7 +45,8 @@ const MessagingHub = () => {
     directConversations,
     users,
     loading: conversationsLoading,
-    startDirectConversation
+    startDirectConversation,
+    removeConversation
   } = useConversations();
   
   // Function to scroll to bottom of messages
@@ -81,10 +82,20 @@ const MessagingHub = () => {
   
   // Function to switch to a channel
   const handleChannelSelect = (channel) => {
+    console.log('Selecting channel:', channel);
     setActiveConversation(channel);
     setConversationType('channel');
+    
+    // Ensure we're passing the correct channel identifier
+    // This is important for loading messages correctly
+    const channelId = channel.name || channel.id || (typeof channel === 'string' ? channel : null);
+    if (!channelId) {
+      console.error('Invalid channel selected, missing identifier:', channel);
+      return;
+    }
+    
     loadMessages(channel, 'channel');
-    markAsRead(channel.id);
+    markAsRead(channelId);
     setShowUserList(false);
   };
   
@@ -231,6 +242,21 @@ const MessagingHub = () => {
     }
   };
   
+  // Function to handle removing a conversation from the list
+  const handleRemoveConversation = (e, userId) => {
+    e.stopPropagation(); // Prevent opening the conversation when clicking the delete button
+    
+    if (window.confirm('Remove this conversation from your recent list?')) {
+      // Use the removeConversation function from ConversationContext
+      removeConversation(userId);
+      
+      // If the active conversation is the one being removed, clear it
+      if (conversationType === 'direct' && activeConversation && activeConversation._id === userId) {
+        setActiveConversation(null);
+      }
+    }
+  };
+  
   // Filter channels based on search term
   const getFilteredChannels = () => {
     // Don't log on every render to avoid excessive console output
@@ -337,37 +363,6 @@ const MessagingHub = () => {
             +
           </button>
         </div>
-        
-        {/* Open Chats Section */}
-        <div className="open-chats-section">
-          <div className="channels-header">
-            <span>Open Chats</span>
-            <button 
-              className="toggle-btn"
-              onClick={() => setShowOpenChats(!showOpenChats)}
-              title={showOpenChats ? "Hide open chats" : "Show open chats"}
-            >
-              {showOpenChats ? "−" : "+"}
-            </button>
-          </div>
-          {showOpenChats && (
-            <ul className="direct-messages-list">
-              {getFilteredDirectMessages().map(conversation => (
-                <li 
-                  key={conversation._id} 
-                  className={`dm-item ${conversationType === 'direct' && 
-                    activeConversation && activeConversation._id === conversation._id ? 'active' : ''}`}
-                  onClick={() => handleDirectMessageSelect(conversation)}
-                >
-                  <div className="user-avatar">
-                    {conversation.username.charAt(0)}
-                  </div>
-                  <span className="username">{conversation.username}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
       </div>
     );
   };
@@ -381,22 +376,38 @@ const MessagingHub = () => {
       <div className="recent-dms-section">
         <div className="recent-dms-header">
           <span>Recent Conversations</span>
+          <button 
+            className="toggle-btn"
+            onClick={() => setShowOpenChats(!showOpenChats)}
+            title={showOpenChats ? "Hide conversations" : "Show conversations"}
+          >
+            {showOpenChats ? "−" : "+"}
+          </button>
         </div>
-        <ul className="direct-messages-list">
-          {getFilteredDirectMessages().map(user => (
-            <li 
-              key={user._id} 
-              className={`dm-item ${conversationType === 'direct' && 
-                activeConversation && activeConversation._id === user._id ? 'active' : ''}`}
-              onClick={() => handleStartDirectMessage(user)}
-            >
-              <div className="user-avatar">
-                {user.username.charAt(0)}
-              </div>
-              <span className="username">{user.username}</span>
-            </li>
-          ))}
-        </ul>
+        {showOpenChats && (
+          <ul className="direct-messages-list">
+            {getFilteredDirectMessages().map(user => (
+              <li 
+                key={user._id} 
+                className={`dm-item ${conversationType === 'direct' && 
+                  activeConversation && activeConversation._id === user._id ? 'active' : ''}`}
+                onClick={() => handleStartDirectMessage(user)}
+              >
+                <div className="user-avatar">
+                  {user.username.charAt(0)}
+                </div>
+                <span className="username">{user.username}</span>
+                <button 
+                  className="remove-conversation-btn"
+                  onClick={(e) => handleRemoveConversation(e, user._id)}
+                  title="Remove from recent conversations"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     );
   };

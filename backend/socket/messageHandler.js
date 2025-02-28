@@ -278,10 +278,10 @@ const loadInitialMessages = async (socket, data) => {
       
       console.log(`[LOAD] Found ${messages.length} channel messages`);
       
-      // Transform and send messages
-      const transformedMessages = messages.map(transformMessage);
+      // Transform and send messages - important to pass the correct event name
+      const transformedMessages = messages.map(transformMessage).reverse(); // Reverse to get chronological order
       socket.emit('initialMessages', {
-        channel: conversationId,
+        channel: channelName,
         messages: transformedMessages,
         type: 'channel'
       });

@@ -42,7 +42,8 @@ export const ConversationProvider = ({ children }) => {
       const response = await fetch(`${API_BASE_URL}/conversations?type=channel`, {
         headers: {
           'Authorization': `Bearer ${user.token}`
-        }
+        },
+        credentials: 'include'
       });
       
       if (!response.ok) {
@@ -96,7 +97,8 @@ export const ConversationProvider = ({ children }) => {
       const response = await fetch(`${API_BASE_URL}/messages/direct/conversations`, {
         headers: {
           'Authorization': `Bearer ${user.token}`
-        }
+        },
+        credentials: 'include'
       });
       
       if (!response.ok) {
@@ -138,7 +140,8 @@ export const ConversationProvider = ({ children }) => {
       const response = await fetch(`${API_BASE_URL}/users/list`, {
         headers: {
           'Authorization': `Bearer ${user.token}`
-        }
+        },
+        credentials: 'include'
       });
       
       if (!response.ok) {
@@ -197,7 +200,8 @@ export const ConversationProvider = ({ children }) => {
         },
         body: JSON.stringify({
           content: 'Hello! I started a new conversation.' // Send an initial message
-        })
+        }),
+        credentials: 'include'
       });
       
       if (!response.ok) {
@@ -252,6 +256,23 @@ export const ConversationProvider = ({ children }) => {
     }
   }, [user?.token, directConversations, users]);
 
+  // Function to remove a conversation from recent conversations list
+  const removeConversation = useCallback((userId) => {
+    if (!userId) return;
+    
+    console.log(`Removing conversation with user ID: ${userId} from recent conversations`);
+    
+    setDirectConversations(prevConversations => {
+      // Filter out the conversation to remove
+      const updatedConversations = prevConversations.filter(c => c._id !== userId);
+      
+      // Save to localStorage for persistence
+      localStorage.setItem('openDirectConversations', JSON.stringify(updatedConversations));
+      
+      return updatedConversations;
+    });
+  }, []);
+
   // Function to create a new channel
   const createChannel = useCallback(async (channelName) => {
     if (!user?.token || !channelName.trim()) return null;
@@ -266,7 +287,8 @@ export const ConversationProvider = ({ children }) => {
         body: JSON.stringify({
           name: channelName.trim(),
           type: 'channel'
-        })
+        }),
+        credentials: 'include'
       });
       
       if (!response.ok) {
@@ -376,7 +398,8 @@ export const ConversationProvider = ({ children }) => {
       fetchDirectConversations,
       fetchUsers,
       startDirectConversation,
-      createChannel
+      createChannel,
+      removeConversation
     }}>
       {children}
     </ConversationContext.Provider>

@@ -460,3 +460,27 @@
   text-align: center;
   padding: 20px;
 }
+
+/* Remove conversation button */
+.remove-conversation-btn {
+  display: none; /* Hidden by default */
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0 6px;
+  margin-left: auto;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.remove-conversation-btn:hover {
+  opacity: 1;
+}
+
+/* Show the button when hovering over the list item */
+.dm-item:hover .remove-conversation-btn {
+  display: block;
+}

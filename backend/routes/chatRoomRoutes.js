@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect } = require('../middleware/authMiddleware');
+const { protect } = require('../middleware/auth');
 const Conversation = require('../models/channelModel');
 const User = require('../models/userModel');
 

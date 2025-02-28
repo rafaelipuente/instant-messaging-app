@@ -1,0 +1,9 @@
+// Find the line around 177 with: conversation = new Conversation({
+// And replace the block with this content:
+      conversation = new Conversation({
+        type: 'direct',
+        participants: [senderId, receiverId],
+        name: `direct-${senderId}-${receiverId}`,
+        displayName: 'Direct Message', // Add required displayName
+        createdBy: senderId // Add required createdBy
+      });
