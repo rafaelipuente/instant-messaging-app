@@ -2,13 +2,15 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
+import { SocketProvider } from '../context/SocketContext';
+import { MessageProvider } from '../context/MessageContext';
+import { ConversationProvider } from '../context/ConversationContext';
 import { Toaster } from 'react-hot-toast';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
-import Chat from './Chat';
+import MessagingHub from './MessagingHub';
 import Home from './Home';
 import Profile from './Profile';
-import DirectMessages from './DirectMessages';
 import '../styles/theme.css';
 
 // Protected Route Component
@@ -41,15 +43,13 @@ const App = () => {
                 path="/chat"
                 element={
                   <ProtectedRoute>
-                    <Chat />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/direct-messages"
-                element={
-                  <ProtectedRoute>
-                    <DirectMessages />
+                    <SocketProvider>
+                      <ConversationProvider>
+                        <MessageProvider>
+                          <MessagingHub />
+                        </MessageProvider>
+                      </ConversationProvider>
+                    </SocketProvider>
                   </ProtectedRoute>
                 }
               />

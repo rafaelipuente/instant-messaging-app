@@ -8,7 +8,7 @@ const fs = require('fs'); // added fs module
 
 // 1. IMPORT ROUTES
 const userRoutes = require('./routes/userRoutes');
-const chatRoomRoutes = require('./routes/chatRoomRoutes'); 
+const conversationRoutes = require('./routes/chatRoomRoutes'); 
 const directMessageRoutes = require('./routes/directMessageRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 
@@ -19,7 +19,7 @@ const app = express();
  * 3. MIDDLEWARE
  *****************************************************/
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001'],  // allow both ports
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],  // allow all test ports
   credentials: true,
 }));
 app.use(express.json());
@@ -40,11 +40,11 @@ app.use('/uploads', (req, res, next) => {
 });
 
 /*****************************************************
- * 4. ATTACH ROUTES
+ * 4. ROUTES
  *****************************************************/
 app.use('/api/users', userRoutes);
-app.use('/api/chat', chatRoomRoutes);
-app.use('/api/dm', directMessageRoutes);
+app.use('/api/conversations', conversationRoutes);
+app.use('/api/direct-messages', directMessageRoutes);
 app.use('/api/messages', messageRoutes);
 
 /*****************************************************

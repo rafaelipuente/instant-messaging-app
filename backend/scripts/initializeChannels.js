@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
-const Channel = require('../models/channelModel');
+const Conversation = require('../models/channelModel');
+const { VALID_CHANNELS } = require('../models/messageModel');
 require('dotenv').config();
 
 // Connect to MongoDB
@@ -40,32 +41,58 @@ const defaultChannels = [
 
 // Initialize channels
 const initializeChannels = async () => {
+  console.log('Initializing default channels...');
+  
   try {
-    // Check if channels already exist
-    const existingChannels = await Channel.find({});
+    // Find a default admin/system user, or create one if needed
+    let systemUserId;
     
-    if (existingChannels.length === 0) {
-      console.log('No channels found. Creating default channels...');
-      
-      // Create default channels
-      await Channel.insertMany(defaultChannels);
-      console.log('Default channels created successfully!');
-    } else {
-      console.log(`${existingChannels.length} channels already exist. No action needed.`);
+    try {
+      // Try to find any user to be the creator
+      const anyUser = await mongoose.model('User').findOne();
+      if (anyUser) {
+        systemUserId = anyUser._id;
+      } else {
+        // If no users exist, create a dummy system user ID
+        systemUserId = new mongoose.Types.ObjectId();
+      }
+    } catch (error) {
+      // If User model isn't available, create a dummy system user ID
+      systemUserId = new mongoose.Types.ObjectId();
     }
     
-    // Display all channels
-    const allChannels = await Channel.find({}).lean();
-    console.log('Current channels:');
-    allChannels.forEach(channel => {
-      console.log(`- ${channel.displayName} (${channel.name}): ${channel.description}`);
-    });
+    // Process each channel
+    for (const channel of defaultChannels) {
+      // Check if channel already exists
+      const existingChannel = await Conversation.findOne({ 
+        name: channel.name,
+        type: 'channel'
+      });
+      
+      if (existingChannel) {
+        console.log(`Channel '${channel.name}' already exists, skipping...`);
+        continue;
+      }
+      
+      // Create new channel
+      await Conversation.create({
+        name: channel.name,
+        displayName: channel.displayName,
+        description: channel.description,
+        icon: channel.icon,
+        type: 'channel',
+        createdBy: systemUserId,
+        isDefaultChannel: true
+      });
+      
+      console.log(`Created channel: ${channel.displayName}`);
+    }
     
-    mongoose.disconnect();
+    console.log('Default channels initialized successfully!');
   } catch (error) {
     console.error('Error initializing channels:', error);
+  } finally {
     mongoose.disconnect();
-    process.exit(1);
   }
 };
 

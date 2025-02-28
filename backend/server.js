@@ -5,14 +5,20 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+
+// Import handlers from message handler
 const { 
-  handleDirectMessage, 
-  handleChannelMessage, 
-  loadInitialMessages, 
+  handleDirectMessage,
+  handleChannelMessage,
+  handleMessageDeletion,
+  loadInitialMessages,
   handleConnection,
-  handleMessageDeletion 
+  handleDisconnect,
+  VALID_CHANNELS
 } = require('./socket/messageHandler');
-const Message = require('./models/messageModel');
+
+// Import models
+const { Message } = require('./models/messageModel');
 
 require('dotenv').config();
 
@@ -43,7 +49,7 @@ mongoose.connect(process.env.MONGODB_URI)
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://localhost:3001"],
+    origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -79,174 +85,46 @@ const connectedUsers = new Map();
 io.on('connection', async (socket) => {
   try {
     const userId = socket.user._id.toString();
+    const username = socket.user.username;
     
-    // Check if user is already connected
-    if (connectedUsers.has(userId)) {
-      // Update the socket ID for the user
-      connectedUsers.get(userId).socketId = socket.id;
-      console.log('User reconnected:', socket.user.username);
-    } else {
-      // Add new user connection
-      connectedUsers.set(userId, { 
-        socketId: socket.id,
-        username: socket.user.username
-      });
-      console.log('User connected:', socket.user.username);
-
-      // Handle initial connection setup
-      await handleConnection(io, socket);
-
+    // Join user's personal room and all valid channels at once
+    socket.join(userId);
+    VALID_CHANNELS.forEach(channel => socket.join(channel.toLowerCase()));
+    
+    // Track connection status
+    const isReconnect = connectedUsers.has(userId);
+    connectedUsers.set(userId, { socketId: socket.id, username });
+    
+    console.log(`User ${username} ${isReconnect ? 're' : ''}connected`);
+    
+    if (!isReconnect) {
+      // Handle initial connection
+      await handleConnection(io, socket, connectedUsers);
+      
       // Update user status to online
       await User.findByIdAndUpdate(userId, { status: 'online' });
-      io.emit('userConnected', { 
-        userId: userId,
-        username: socket.user.username,
-        status: 'online'
-      });
+      io.emit('userConnected', { userId, username, status: 'online' });
     }
-
-    // Handle loading initial messages
-    socket.on('loadInitialMessages', async (data) => {
-      try {
-        await loadInitialMessages(socket, data);
-      } catch (error) {
-        console.error('Error loading messages:', error);
-        socket.emit('messageError', { error: 'Failed to load messages' });
-      }
-    });
-
-    // Handle joining channels
-    socket.on('join', async ({ channel }) => {
-      try {
-        const channelName = channel.toLowerCase();
-        
-        // Validate channel
-        const validChannels = ['general', 'tech-talk', 'random', 'music'];
-        if (!validChannels.includes(channelName)) {
-          console.warn(`Invalid channel: ${channelName}`);
-          socket.emit('error', { message: 'Invalid channel' });
-          return;
-        }
-        
-        console.log(`User ${socket.user.username} joining channel: ${channelName}`);
-        socket.join(channelName);
-        
-        // Notify channel about new user
-        socket.to(channelName).emit('userJoinedChannel', {
-          username: socket.user.username,
-          channel: channelName
-        });
-      } catch (error) {
-        console.error('Error joining channel:', error);
-        socket.emit('error', { message: 'Failed to join channel' });
-      }
+    
+    // Register message event handlers
+    socket.on('channelMessage', data => handleChannelMessage(io, socket, data));
+    socket.on('directMessage', data => handleDirectMessage(io, socket, data));
+    socket.on('deleteMessage', data => handleMessageDeletion(io, socket, data));
+    socket.on('loadInitialMessages', data => loadInitialMessages(io, socket, data));
+    
+    // Typing indicator events
+    socket.on('typing', ({ channel }) => {
+      socket.to(channel).emit('userTyping', { channel, username });
     });
     
-    // Handle joining rooms (for public chat rooms)
-    socket.on('join room', (room) => {
-      try {
-        if (!room) {
-          console.warn(`[JOIN ROOM] Invalid room name: ${room}`);
-          socket.emit('error', { message: 'Invalid room name' });
-          return;
-        }
-        
-        // Validate room name
-        const validRooms = ['general', 'tech-talk', 'random', 'music'];
-        if (!validRooms.includes(room.toLowerCase())) {
-          console.warn(`[JOIN ROOM] User ${socket.user.username} attempted to join invalid room: ${room}`);
-          socket.emit('error', { message: 'Invalid room name' });
-          return;
-        }
-        
-        // Join the room
-        socket.join(room);
-        console.log(`[JOIN ROOM] User ${socket.user.username} joined room: ${room}`);
-        
-        // Notify other users in the room
-        socket.to(room).emit('user joined', {
-          username: socket.user.username,
-          userId: socket.user._id,
-          room: room
-        });
-      } catch (error) {
-        console.error('[JOIN ROOM] Error joining room:', error);
-        socket.emit('error', { message: 'Failed to join room' });
-      }
+    socket.on('stopTyping', ({ channel }) => {
+      socket.to(channel).emit('userStopTyping', { channel });
     });
     
-    // Handle chat messages for rooms
-    socket.on('chat message', async (msg) => {
-      try {
-        console.log(`[CHAT MESSAGE] User ${socket.user.username} sent message to room: ${msg.room}`);
-        
-        // Broadcast message to room
-        io.to(msg.room).emit('chat message', {
-          ...msg,
-          sender: {
-            _id: socket.user._id,
-            username: socket.user.username
-          },
-          timestamp: new Date()
-        });
-        
-        // Save message to database
-        const message = new Message({ 
-          content: msg.content, 
-          room: msg.room,
-          sender: socket.user._id,
-          messageType: 'channel',
-          channel: msg.room
-        });
-        
-        await message.save();
-        console.log(`[CHAT MESSAGE] Message saved to room: ${msg.room}`);
-      } catch (error) {
-        console.error('[CHAT MESSAGE] Error saving message:', error);
-        socket.emit('error', { message: 'Failed to save message' });
-      }
-    });
-
-    // Handle direct messages
-    socket.on('directMessage', (data) => handleDirectMessage(io, socket, data));
-
-    // Handle channel messages
-    socket.on('channelMessage', (data) => handleChannelMessage(io, socket, data));
-
-    // Handle message deletion
-    socket.on('deleteMessage', (data) => handleMessageDeletion(io, socket, data));
-
-    // Handle user typing
-    socket.on('typing', ({ channel, username }) => {
-      socket.to(channel.toLowerCase()).emit('userTyping', { username });
-    });
-
     // Handle disconnection
-    socket.on('disconnect', async () => {
-      try {
-        const userId = socket.user._id.toString();
-        
-        // Check if user has other active connections
-        if (connectedUsers.has(userId) && connectedUsers.get(userId).socketId === socket.id) {
-          // Only remove user if this was their last connection
-          connectedUsers.delete(userId);
-          console.log('User fully disconnected:', socket.user.username);
-          
-          // Update user status to offline
-          await User.findByIdAndUpdate(userId, { 
-            status: 'offline', 
-            lastSeen: new Date() 
-          });
-          io.emit('userDisconnected', { userId: userId });
-        } else {
-          console.log('User still has other active connections:', socket.user.username);
-        }
-      } catch (error) {
-        console.error('Error handling disconnect:', error);
-      }
-    });
+    socket.on('disconnect', () => handleDisconnect(io, socket, connectedUsers));
   } catch (error) {
-    console.error('Error handling socket connection:', error);
+    console.error('Socket connection error:', error);
   }
 });
 

@@ -1,75 +1,140 @@
-const Message = require('../models/messageModel');
+const { Message, VALID_CHANNELS } = require('../models/messageModel');
 const User = require('../models/userModel');
+const Conversation = require('../models/channelModel');
 const path = require('path');
-const mongoose = require('mongoose'); // Add this line
-
-// Constants
-const VALID_CHANNELS = ['general', 'tech-talk', 'random', 'music'];
+const mongoose = require('mongoose');
 
 // Helper function to transform message for client
-const transformMessage = (message) => ({
-  _id: message._id,
-  content: message.content,
-  timestamp: message.timestamp,
-  messageType: message.messageType,
-  channel: message.channel,
-  sender: {
-    _id: message.sender._id,
-    username: message.sender.username,
-    profilePicture: message.sender.profilePicture ? `/uploads/${path.basename(message.sender.profilePicture)}` : null
-  },
-  receiver: message.receiver ? {
-    _id: message.receiver._id,
-    username: message.receiver.username,
-    profilePicture: message.receiver.profilePicture ? `/uploads/${path.basename(message.receiver.profilePicture)}` : null
-  } : null
-});
+const transformMessage = (message) => {
+  const base = {
+    _id: message._id,
+    content: message.content,
+    timestamp: message.createdAt || message.timestamp,
+    sender: {
+      _id: message.sender._id,
+      username: message.sender.username,
+      profilePicture: message.sender.profilePicture ? 
+        `/uploads/${path.basename(message.sender.profilePicture)}` : null,
+      status: message.sender.status
+    },
+    isDeleted: message.isDeleted || false
+  };
+
+  // Add channel info for public messages
+  if (message.channel) {
+    base.channel = message.channel;
+  }
+
+  // Add receiver info for direct messages
+  if (message.receiver) {
+    base.receiver = {
+      _id: message.receiver._id,
+      username: message.receiver.username,
+      profilePicture: message.receiver.profilePicture ? 
+        `/uploads/${path.basename(message.receiver.profilePicture)}` : null,
+      status: message.receiver.status
+    };
+  }
+
+  return base;
+};
+
+// Unified function to broadcast messages
+const broadcastMessage = (io, roomIds, message, type) => {
+  const transformedMessage = transformMessage(message);
+  
+  // Ensure roomIds is an array
+  const rooms = Array.isArray(roomIds) ? roomIds : [roomIds];
+  
+  // Send to all specified rooms
+  rooms.forEach(roomId => {
+    if (!roomId) return;
+    
+    // Use the unified messageReceived event
+    io.to(roomId.toString()).emit('messageReceived', {
+      type,
+      message: transformedMessage
+    });
+    
+    // Also send the specific event type for backward compatibility
+    const eventName = type === 'channel' ? 'channelMessage' : 'directMessage';
+    io.to(roomId.toString()).emit(eventName, transformedMessage);
+  });
+  
+  return transformedMessage;
+};
 
 const handleChannelMessage = async (io, socket, data) => {
   try {
     const { content, channel } = data;
-    const channelName = channel.toLowerCase();
+    
+    console.log(`[CHANNEL] Processing message for channel: ${channel}`, data);
+    
+    // Always standardize channel names to lowercase and handle dash vs space conversion
+    let channelName = channel ? channel.toLowerCase() : null;
+    
+    // Support both "tech-talk" and "tech talk" formats
+    if (channelName === 'tech talk') channelName = 'tech-talk';
+    if (channelName === 'tech') channelName = 'tech-talk';  // Legacy support
 
+    console.log(`User ${socket.user.username} sent channel message to ${channelName}:`, content);
+    
     // Validate channel
+    if (!channelName) {
+      console.error(`[CHANNEL] No channel name provided`);
+      socket.emit('messageError', { error: 'Channel name is required' });
+      return;
+    }
+    
+    // Check against VALID_CHANNELS with more detailed logging
+    console.log(`[CHANNEL] Validating channel "${channelName}" against:`, VALID_CHANNELS);
     if (!VALID_CHANNELS.includes(channelName)) {
-      throw new Error('Invalid channel');
+      console.error(`[CHANNEL] Invalid channel name: ${channelName}`);
+      socket.emit('messageError', { error: `Invalid channel name: ${channelName}. Valid channels are: ${VALID_CHANNELS.join(', ')}` });
+      return;
     }
 
-    console.log(`Handling channel message in ${channelName} from ${socket.user.username}`);
+    console.log(`[CHANNEL] Message in ${channelName} from ${socket.user.username}`);
 
-    // Create and save the message
+    // Find the channel conversation
+    let conversation = await Conversation.findOne({ 
+      name: channelName,
+      type: 'channel'
+    });
+
+    // If channel doesn't exist, create it (unlikely, but as a fallback)
+    if (!conversation) {
+      console.log(`[CHANNEL] Creating new channel: ${channelName}`);
+      conversation = await Conversation.create({
+        name: channelName,
+        displayName: channelName.charAt(0).toUpperCase() + channelName.slice(1),
+        type: 'channel',
+        createdBy: socket.user._id,
+        isDefaultChannel: true
+      });
+    }
+
+    // Create and save the channel message
     const message = new Message({
       sender: socket.user._id,
       content,
-      channel: channelName,
-      messageType: 'channel'
+      channel: channelName
     });
 
     await message.save();
-    await message.populate('sender', 'username profilePicture');
+    await message.populate('sender', 'username profilePicture status');
 
-    // Transform message for broadcasting
-    const transformedMessage = {
-      _id: message._id,
-      content: message.content,
-      timestamp: message.timestamp,
-      messageType: message.messageType,
-      channel: message.channel,
-      sender: {
-        _id: message.sender._id,
-        username: message.sender.username,
-        profilePicture: message.sender.profilePicture ? `/uploads/${path.basename(message.sender.profilePicture)}` : null
-      }
-    };
+    // Update channel's lastActivity
+    conversation.lastActivity = new Date();
+    await conversation.save();
 
-    console.log(`Broadcasting channel message to ${channelName}`);
-    // Broadcast to everyone in the channel including sender
-    io.to(channelName).emit('channelMessage', transformedMessage);
-
+    // Broadcast message to everyone in the channel
+    return broadcastMessage(io, channelName, message, 'channel');
   } catch (error) {
-    console.error('Error handling channel message:', error);
-    console.error('Error details:', error.stack);
-    socket.emit('messageError', { error: 'Failed to send message' });
+    console.error('[CHANNEL] Error handling channel message:', error);
+    console.error('[CHANNEL] Error details:', error.stack);
+    socket.emit('messageError', { error: 'Failed to send channel message' });
+    throw error;
   }
 };
 
@@ -77,69 +142,47 @@ const handleDirectMessage = async (io, socket, data) => {
   try {
     const { content, receiverId } = data;
     const senderId = socket.user._id;
-    const chatId = Message.generateChatId(senderId, receiverId);
 
-    console.log(`Handling direct message in ${chatId} from ${socket.user.username} to ${receiverId}`);
+    console.log(`[DIRECT MESSAGE] Handling direct message from ${socket.user.username} to ${receiverId}`);
 
+    // Find or create the conversation between the users
+    const conversation = await Conversation.findOrCreateDirectConversation(senderId, receiverId);
+    
     // Create and save the message
     const message = new Message({
       sender: senderId,
       receiver: receiverId,
-      content,
-      channel: chatId,
-      messageType: 'direct'
+      content
     });
 
     await message.save();
-    await message.populate('sender', 'username profilePicture');
-    await message.populate('receiver', 'username profilePicture');
+    console.log(`[DIRECT MESSAGE] Direct message saved with ID: ${message._id}`);
+    
+    await message.populate('sender', 'username profilePicture status');
+    await message.populate('receiver', 'username profilePicture status');
 
-    // Add users to each other's open chats if not already there
+    // Update users' conversations
     const [sender, receiver] = await Promise.all([
       User.findById(senderId),
       User.findById(receiverId)
     ]);
 
-    if (!sender.openChats.includes(receiverId)) {
-      sender.openChats.push(receiverId);
-      await sender.save();
-    }
+    // Add conversation to users and update unread count
+    await sender.addConversation(conversation._id);
+    await receiver.addConversation(conversation._id);
+    await receiver.incrementUnreadCount(conversation._id);
 
-    if (!receiver.openChats.includes(senderId)) {
-      receiver.openChats.push(senderId);
-      await receiver.save();
-    }
+    // Update conversation's lastActivity
+    conversation.lastActivity = new Date();
+    await conversation.save();
 
-    // Transform message for broadcasting
-    const transformedMessage = {
-      _id: message._id,
-      content: message.content,
-      timestamp: message.timestamp,
-      messageType: message.messageType,
-      channel: message.channel,
-      sender: {
-        _id: message.sender._id,
-        username: message.sender.username,
-        profilePicture: message.sender.profilePicture ? `/uploads/${path.basename(message.sender.profilePicture)}` : null
-      },
-      receiver: {
-        _id: message.receiver._id,
-        username: message.receiver.username,
-        profilePicture: message.receiver.profilePicture ? `/uploads/${path.basename(message.receiver.profilePicture)}` : null
-      }
-    };
-
-    console.log('Sending direct message:', transformedMessage);
-
-    console.log(`Sending direct message to ${senderId} and ${receiverId}`);
-    // Send to both sender and receiver
-    io.to(senderId.toString()).emit('newDirectMessage', transformedMessage);
-    io.to(receiverId.toString()).emit('newDirectMessage', transformedMessage);
-
+    // Broadcast to both users
+    return broadcastMessage(io, [senderId.toString(), receiverId.toString()], message, 'direct');
   } catch (error) {
-    console.error('Error handling direct message:', error);
-    console.error('Error details:', error.stack);
-    socket.emit('messageError', { error: 'Failed to send message' });
+    console.error('[DIRECT MESSAGE] Error handling direct message:', error);
+    console.error('[DIRECT MESSAGE] Error details:', error.stack);
+    socket.emit('messageError', { error: 'Failed to send direct message' });
+    throw error;
   }
 };
 
@@ -147,212 +190,238 @@ const handleMessageDeletion = async (io, socket, data) => {
   try {
     const { messageId } = data;
     
-    console.log(`[DELETE] Handling message deletion for ${messageId} by ${socket.user.username} (${socket.user._id})`);
-    console.log(`[DELETE] Data received:`, JSON.stringify(data));
-    
     if (!messageId) {
-      console.log(`[DELETE ERROR] No messageId provided`);
-      return socket.emit('messageError', { error: 'No message ID provided' });
+      throw new Error('Missing message ID');
     }
+
+    console.log(`[DELETE] Processing delete request for message ${messageId} from user ${socket.user._id}`);
     
-    // Ensure messageId is a string and trim any whitespace
-    const messageIdStr = String(messageId).trim();
-    
-    // Ensure messageId is valid
-    if (!mongoose.Types.ObjectId.isValid(messageIdStr)) {
-      console.log(`[DELETE ERROR] Invalid message ID format: ${messageIdStr}`);
-      return socket.emit('messageError', { error: 'Invalid message ID format' });
-    }
-    
-    // Find the message to get its details before deletion
-    console.log(`[DELETE] Attempting to find message with ID: ${messageIdStr}`);
-    const message = await Message.findById(messageIdStr);
+    // Find the message
+    const message = await Message.findById(messageId)
+      .populate('sender', 'username')
+      .populate('receiver', 'username');
     
     if (!message) {
-      console.log(`[DELETE ERROR] Message ${messageIdStr} not found`);
-      return socket.emit('messageError', { error: 'Message not found' });
+      console.error(`[DELETE] Message ${messageId} not found`);
+      socket.emit('messageError', { error: 'Message not found' });
+      return null;
     }
-    
-    console.log(`[DELETE] Message found:`, JSON.stringify({
-      _id: message._id.toString(),
-      sender: message.sender.toString(),
-      receiver: message.receiver ? message.receiver.toString() : null,
-      messageType: message.messageType,
-      channel: message.channel
-    }));
     
     // Check if the user is authorized to delete this message
-    const messageSenderId = message.sender.toString();
-    const currentUserId = socket.user._id.toString();
-    
-    console.log(`[DELETE] Message sender: ${messageSenderId}, Current user: ${currentUserId}`);
-    
-    if (messageSenderId !== currentUserId) {
-      console.log(`[DELETE ERROR] Unauthorized deletion attempt by ${socket.user.username}`);
-      console.log(`[DELETE ERROR] Message sender: ${messageSenderId}, User ID: ${currentUserId}`);
-      return socket.emit('messageError', { error: 'Unauthorized to delete this message' });
+    if (message.sender._id.toString() !== socket.user._id.toString()) {
+      console.error(`[DELETE] User ${socket.user._id} not authorized to delete message ${messageId}`);
+      socket.emit('messageError', { error: 'Not authorized to delete this message' });
+      return null;
     }
     
-    // Delete the message
-    console.log(`[DELETE] Deleting message ${messageIdStr}`);
-    const deleteResult = await Message.findByIdAndDelete(messageIdStr);
-    console.log(`[DELETE] Delete result:`, deleteResult ? 'Success' : 'Failed');
+    // Mark message as deleted rather than physically deleting it
+    message.isDeleted = true;
+    message.content = "This message has been deleted";
+    await message.save();
     
-    // Notify clients about deletion
-    if (message.messageType === 'channel') {
-      console.log(`[DELETE] Broadcasting channel message deletion to ${message.channel}`);
-      io.to(message.channel).emit('messageDeleted', { messageId: messageIdStr });
-    } else if (message.messageType === 'direct') {
-      // For direct messages, we need to emit to both users directly
-      console.log(`[DELETE] Sending direct message deletion notification for message ${messageIdStr}`);
+    console.log(`[DELETE] Message ${messageId} marked as deleted`);
+    
+    // Broadcast deletion event
+    if (message.channel && VALID_CHANNELS.includes(message.channel)) {
+      // Channel message - broadcast to everyone in the channel
+      console.log(`[DELETE] Broadcasting deletion to channel ${message.channel}`);
+      io.to(message.channel).emit('messageDeleted', { messageId });
+    } else {
+      // Direct message - send to both participants
+      const senderId = message.sender._id.toString();
+      const receiverId = message.receiver._id.toString();
       
-      // Get the other user's ID
-      const receiverId = message.receiver ? message.receiver.toString() : null;
-      
-      if (!receiverId) {
-        console.log(`[DELETE WARNING] No receiver found for direct message ${messageIdStr}`);
-      } else {
-        console.log(`[DELETE] Current user: ${currentUserId}, Receiver: ${receiverId}`);
-      }
-      
-      // Emit to the current user
-      socket.emit('messageDeleted', { messageId: messageIdStr });
-      
-      // Find the other user's socket and emit to them if they're online
-      if (receiverId) {
-        const connectedSockets = Array.from(io.sockets.sockets.values());
-        console.log(`[DELETE] Total connected sockets: ${connectedSockets.length}`);
-        
-        const otherUserSocket = connectedSockets.find(s => 
-          s.user && s.user._id && s.user._id.toString() === receiverId
-        );
-        
-        if (otherUserSocket) {
-          console.log(`[DELETE] Found socket for receiver ${receiverId}, sending deletion notification`);
-          otherUserSocket.emit('messageDeleted', { messageId: messageIdStr });
-        } else {
-          console.log(`[DELETE] Receiver ${receiverId} not connected, skipping notification`);
-        }
-      }
+      console.log(`[DELETE] Broadcasting deletion to users ${senderId} and ${receiverId}`);
+      io.to(senderId).emit('messageDeleted', { messageId });
+      io.to(receiverId).emit('messageDeleted', { messageId });
     }
     
-    // Send success confirmation to the client
-    console.log(`[DELETE] Sending success confirmation to client for message ${messageIdStr}`);
-    socket.emit('messageDeleteSuccess', { messageId: messageIdStr });
-    
+    return { success: true, messageId };
   } catch (error) {
-    console.error('[DELETE ERROR] Error handling message deletion:', error);
-    console.error('[DELETE ERROR] Error details:', error.stack);
+    console.error('[DELETE] Error handling message deletion:', error);
+    console.error('[DELETE] Error details:', error.stack);
     socket.emit('messageError', { error: 'Failed to delete message' });
+    return null;
   }
 };
 
 const loadInitialMessages = async (socket, data) => {
   try {
-    console.log(`Loading initial messages for user ${socket.user.username}`, data);
+    const { channel, type, limit = 50 } = data;
     
-    // Validate the data
-    if (!data) {
-      throw new Error('Invalid data provided');
+    console.log(`[LOAD] Loading initial messages: ${JSON.stringify(data)}`);
+    
+    if (!channel) {
+      console.error('[LOAD] Missing channel in loadInitialMessages');
+      socket.emit('error', { message: 'Channel or conversation ID is required' });
+      return;
     }
     
-    let messages = [];
-    
-    // Load channel messages
-    if (data.channel) {
-      const channelName = data.channel.toLowerCase();
+    // Handle standard public channels by name (like 'general', 'tech-talk', etc.)
+    if (type === 'channel') {
+      // Standard channel - use lowercase name
+      const channelName = channel.toLowerCase();
+      console.log(`[LOAD] Loading messages for channel: ${channelName}`);
       
-      // Validate channel
-      const validChannels = ['general', 'tech-talk', 'random', 'music'];
-      if (!validChannels.includes(channelName)) {
-        console.warn(`Invalid channel: ${channelName}`);
-        socket.emit('error', { message: 'Invalid channel' });
-        return;
-      }
-      
-      console.log(`Loading messages for channel: ${channelName}`);
-      
-      // Join the channel
-      socket.join(channelName);
-      
-      // Get messages for the channel
-      messages = await Message.find({ 
+      // Get channel messages
+      const messages = await Message.find({
         channel: channelName,
-        messageType: 'channel'
+        isDeleted: false
       })
-      .sort({ timestamp: -1 })
-      .limit(50)
-      .populate('sender', 'username profilePicture')
-      .lean();
-    } 
-    // Load direct messages
-    else if (data.userId) {
-      const currentUserId = socket.user._id.toString();
-      const otherUserId = data.userId;
+        .sort({ createdAt: -1 })
+        .limit(Number(limit))
+        .populate('sender', 'username profilePicture status')
+        .lean();
       
-      console.log(`Loading direct messages between ${currentUserId} and ${otherUserId}`);
+      console.log(`[LOAD] Found ${messages.length} channel messages`);
       
-      // Get direct messages between the two users
-      messages = await Message.find({
-        messageType: 'direct',
-        $or: [
-          { sender: currentUserId, receiver: otherUserId },
-          { sender: otherUserId, receiver: currentUserId }
-        ]
-      })
-      .sort({ timestamp: -1 })
-      .limit(50)
-      .populate('sender', 'username profilePicture')
-      .lean();
+      // Transform and send messages
+      const transformedMessages = messages.map(transformMessage);
+      socket.emit('initialMessages', {
+        channel,
+        messages: transformedMessages
+      });
+      
+      return transformedMessages;
+    } else if (type === 'direct') {
+      // It's a direct message conversation
+      try {
+        // Validate if the ID is a valid ObjectId (for DB lookup)
+        let conversationId;
+        try {
+          conversationId = new mongoose.Types.ObjectId(channel);
+        } catch (err) {
+          console.error(`[LOAD] Invalid ObjectId format for direct message: ${channel}`);
+          socket.emit('error', { message: 'Invalid conversation ID format' });
+          return;
+        }
+        
+        const conversation = await Conversation.findById(conversationId);
+        
+        if (!conversation) {
+          console.error(`[LOAD] Conversation not found: ${channel}`);
+          socket.emit('error', { message: 'Conversation not found' });
+          return;
+        }
+        
+        if (conversation.type === 'direct') {
+          // Get the participants
+          const participants = conversation.participants;
+          if (!participants || participants.length !== 2) {
+            throw new Error('Invalid direct conversation participants');
+          }
+          
+          // Load direct messages
+          const messages = await Message.getDirectMessages(
+            participants[0],
+            participants[1],
+            Number(limit)
+          );
+          
+          console.log(`[LOAD] Found ${messages.length} direct messages`);
+          
+          // Transform and send messages
+          const transformedMessages = messages.map(transformMessage);
+          socket.emit('initialMessages', {
+            channel,
+            messages: transformedMessages
+          });
+          
+          return transformedMessages;
+        } else {
+          console.error(`[LOAD] Found conversation but it's not a direct type: ${conversation.type}`);
+          socket.emit('error', { message: 'Invalid conversation type' });
+          return;
+        }
+      } catch (error) {
+        console.error('[LOAD] Error processing conversation ID:', error);
+        socket.emit('error', { message: 'Error loading messages' });
+      }
     } else {
-      throw new Error('Invalid request: missing channel or userId');
+      console.error(`[LOAD] Invalid message type: ${type}`);
+      socket.emit('error', { message: 'Invalid message type' });
     }
-    
-    // Transform messages for client
-    const transformedMessages = messages.map(msg => ({
-      _id: msg._id,
-      content: msg.content,
-      timestamp: msg.timestamp,
-      messageType: msg.messageType,
-      channel: msg.channel,
-      sender: {
-        _id: msg.sender._id,
-        username: msg.sender.username,
-        profilePicture: msg.sender.profilePicture || null
-      },
-      receiver: msg.receiver
-    }));
-    
-    // Send previous messages to the user (reversed to show oldest first)
-    socket.emit('previousMessages', transformedMessages.reverse());
-    
-    return { success: true, count: transformedMessages.length };
   } catch (error) {
-    console.error('Error loading initial messages:', error);
-    socket.emit('messageError', { error: 'Failed to load messages' });
-    return { success: false, error: error.message };
+    console.error('[LOAD] Error in loadInitialMessages:', error);
+    socket.emit('error', { message: 'Error loading messages' });
   }
 };
 
-const handleConnection = async (io, socket) => {
+const handleConnection = async (io, socket, connectedUsers) => {
   try {
-    // Join user to their own room for direct messages
-    socket.join(socket.user._id.toString());
+    // Update user status to online
+    await User.findByIdAndUpdate(socket.user._id, {
+      status: 'online',
+      lastSeen: new Date()
+    });
     
-    // Join default channels
-    VALID_CHANNELS.forEach(channel => {
+    // Join rooms for all valid channels
+    for (const channel of VALID_CHANNELS) {
       socket.join(channel);
-      console.log(`User ${socket.user.username} joined channel: ${channel}`);
-    });
-
-    // Notify others of user connection
-    socket.broadcast.emit('userConnected', {
+      console.log(`[CONNECTION] User ${socket.user.username} joined channel ${channel}`);
+    }
+    
+    // Join a room with the user's ID for direct messaging
+    socket.join(socket.user._id.toString());
+    console.log(`[CONNECTION] User ${socket.user.username} joined personal room ${socket.user._id}`);
+    
+    // Find all conversations for this user
+    const user = await User.findById(socket.user._id).populate('conversations.conversationId');
+    
+    // Join rooms for all direct message conversations
+    for (const conv of user.conversations) {
+      if (conv.conversationId && conv.conversationId.type === 'direct') {
+        socket.join(conv.conversationId._id.toString());
+        console.log(`[CONNECTION] User ${socket.user.username} joined conversation ${conv.conversationId._id}`);
+      }
+    }
+    
+    // Notify others that user is online
+    socket.broadcast.emit('userStatus', {
       userId: socket.user._id,
-      username: socket.user.username
+      status: 'online'
     });
-
+    
+    // Send online users to the newly connected user
+    const onlineUsers = Array.from(connectedUsers.keys()).map(userId => ({
+      userId,
+      username: connectedUsers.get(userId).username,
+      status: 'online'
+    }));
+    
+    socket.emit('onlineUsers', onlineUsers);
+    
+    return true;
   } catch (error) {
-    console.error('Error handling connection:', error);
+    console.error('[CONNECTION] Error handling connection:', error);
+    console.error('[CONNECTION] Error details:', error.stack);
+    return false;
+  }
+};
+
+const handleDisconnect = async (io, socket, connectedUsers) => {
+  try {
+    const userId = socket.user._id.toString();
+    
+    // Remove user from connected users
+    connectedUsers.delete(userId);
+    
+    // Update user status to offline
+    await User.findByIdAndUpdate(userId, { 
+      status: 'offline',
+      lastSeen: new Date()
+    });
+    
+    // Notify other users
+    io.emit('userDisconnected', { 
+      userId,
+      username: socket.user.username,
+      status: 'offline'
+    });
+    
+    console.log('User disconnected:', socket.user.username);
+  } catch (error) {
+    console.error('Error handling disconnect:', error);
   }
 };
 
@@ -361,5 +430,7 @@ module.exports = {
   handleDirectMessage,
   handleMessageDeletion,
   loadInitialMessages,
-  handleConnection
+  handleConnection,
+  handleDisconnect,
+  VALID_CHANNELS
 };

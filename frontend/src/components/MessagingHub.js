@@ -7,7 +7,6 @@ import { useConversations } from '../context/ConversationContext';
 import UserAvatar from './UserAvatar';
 import Navbar from './Navbar';
 import { API_BASE_URL } from '../config';
-import toast from 'react-hot-toast';
 import '../styles/Chat.css';
 import '../styles/DirectMessages.css';
 import '../styles/MessagingHub.css';
@@ -18,10 +17,9 @@ const MessagingHub = () => {
   const navigate = useNavigate();
   const [message, setMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [showChannels, setShowChannels] = useState(true);
-  const [showDirectMessages, setShowDirectMessages] = useState(false);
+  const [activeToggle, setActiveToggle] = useState('channels');
   const [showUserList, setShowUserList] = useState(false);
-  const [showRecentDMs, setShowRecentDMs] = useState(true);
+  const [displayRecentDMs] = useState(true);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   
@@ -46,8 +44,7 @@ const MessagingHub = () => {
     directConversations,
     users,
     loading: conversationsLoading,
-    startDirectConversation,
-    createChannel
+    startDirectConversation
   } = useConversations();
   
   // Function to scroll to bottom of messages
@@ -119,7 +116,7 @@ const MessagingHub = () => {
     }
     
     // Always make sure Recent DMs is visible
-    setShowRecentDMs(true);
+    setShowUserList(false);
   };
   
   // Function to handle creating a new channel (disabled as per requirements)
@@ -205,7 +202,7 @@ const MessagingHub = () => {
   };
   
   // Filter channels based on search term
-  const filteredChannels = channels
+  const getFilteredChannels = () => channels
     .filter(channel => {
       // Remove the "genral" channel and filter by search term
       return channel.name.toLowerCase() !== 'genral' && 
@@ -218,11 +215,11 @@ const MessagingHub = () => {
       return a.name.localeCompare(b.name);
     });
   
-  const filteredDirectMessages = directConversations.filter(conversation => 
+  const getFilteredDirectMessages = () => directConversations.filter(conversation => 
     conversation.username?.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
-  const filteredUsers = users.filter(user => 
+  const getFilteredUsers = () => users.filter(user => 
     user.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
@@ -245,6 +242,113 @@ const MessagingHub = () => {
       : `${API_BASE_URL.replace('/api', '')}${profilePicture}`;
   };
   
+  // Render sidebar toggle buttons
+  const renderToggleButtons = () => {
+    return (
+      <div className="toggle-container">
+        <button 
+          className={`toggle-btn ${activeToggle === 'channels' ? 'active' : ''}`}
+          onClick={() => setActiveToggle('channels')}
+        >
+          Channels
+        </button>
+        <button 
+          className={`toggle-btn ${activeToggle === 'messages' ? 'active' : ''}`}
+          onClick={() => setActiveToggle('messages')}
+        >
+          Messages
+        </button>
+      </div>
+    );
+  };
+  
+  // Render channels section
+  const renderChannels = () => {
+    return (
+      <div className="channels-section">
+        <div className="channels-header">
+          <span>Channels</span>
+          {/* Removed the + button completely since users cannot create channels */}
+        </div>
+        <ul className="channels-list">
+          {getFilteredChannels().map(channel => (
+            <li 
+              key={channel._id || channel.id} 
+              className={`channel-item ${conversationType === 'channel' && activeConversation && 
+                (activeConversation._id === channel._id || activeConversation.id === channel.id || 
+                 activeConversation === channel.name) ? 'active' : ''}`}
+              onClick={() => handleChannelSelect(channel)}
+            >
+              # {channel.name}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+  
+  // Render direct messages section
+  const renderDirectMessages = () => {
+    return (
+      <div className="direct-messages-section">
+        <div className="channels-header">
+          <span>Direct Messages</span>
+          <button 
+            className="create-dm-btn"
+            onClick={() => setShowUserList(!showUserList)}
+            title="Start a new conversation"
+          >
+            +
+          </button>
+        </div>
+        <ul className="direct-messages-list">
+          {getFilteredDirectMessages().map(conversation => (
+            <li 
+              key={conversation._id} 
+              className={`dm-item ${conversationType === 'direct' && 
+                activeConversation && activeConversation._id === conversation._id ? 'active' : ''}`}
+              onClick={() => handleDirectMessageSelect(conversation)}
+            >
+              <div className="user-avatar">
+                {conversation.username.charAt(0)}
+              </div>
+              <span className="username">{conversation.username}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+  
+  // Render recent DMs section
+  const renderRecentDMs = () => {
+    // Only show if there are any recent DMs
+    if (directConversations.length === 0) return null;
+    
+    return (
+      <div className="recent-dms-section">
+        <div className="recent-dms-header">
+          <span>Recent Conversations</span>
+        </div>
+        <ul className="direct-messages-list">
+          {getFilteredDirectMessages().map(user => (
+            <li 
+              key={user._id} 
+              className={`dm-item ${conversationType === 'direct' && 
+                activeConversation && activeConversation._id === user._id ? 'active' : ''}`}
+              onClick={() => handleStartDirectMessage(user)}
+            >
+              <div className="user-avatar">
+                {user.username.charAt(0)}
+              </div>
+              <span className="username">{user.username}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+
   if (!user) {
     navigate('/login');
     return null;
@@ -253,200 +357,84 @@ const MessagingHub = () => {
   return (
     <div className="messaging-hub">
       <Navbar />
-      
       <div className="messaging-container">
+        
         {/* Sidebar */}
         <div className="sidebar">
           {/* Search */}
           <div className="search-container">
             <input
               type="text"
+              className="search-input"
               placeholder="Search..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="search-input"
             />
           </div>
           
           {/* Toggle between channels and direct messages */}
-          <div className="toggle-container">
-            <button 
-              className={`toggle-button ${showChannels ? 'active' : ''}`}
-              onClick={() => {
-                setShowChannels(true);
-                setShowDirectMessages(false);
-                setShowUserList(false);
-              }}
-            >
-              Channels
-            </button>
-            <button 
-              className={`toggle-button ${showDirectMessages ? 'active' : ''}`}
-              onClick={() => {
-                setShowChannels(false);
-                setShowDirectMessages(true);
-                setShowUserList(false);
-              }}
-            >
-              Direct Messages
-            </button>
-          </div>
+          {renderToggleButtons()}
           
           {/* Channel List */}
-          {showChannels && (
-            <div className="channel-list">
-              <div className="section-header">
-                <h3>Channels</h3>
-                {/* Create Channel button removed as per requirement */}
-              </div>
-              
-              {conversationsLoading ? (
-                <div className="loading">Loading channels...</div>
-              ) : (
-                <ul>
-                  {filteredChannels.map(channel => (
-                    <li 
-                      key={channel.id} 
-                      className={activeConversation?.id === channel.id ? 'active' : ''}
-                      onClick={() => handleChannelSelect(channel)}
-                    >
-                      <span className="channel-icon">{channel.icon}</span>
-                      <span className="channel-name">{channel.name}</span>
-                      {unreadMessages[channel.id] > 0 && (
-                        <span className="unread-badge">{unreadMessages[channel.id]}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+          {activeToggle === 'channels' && renderChannels()}
           
           {/* Direct Messages Section */}
-          {showDirectMessages && (
-            <div className="dm-list">
-              <div className="section-header">
-                <h3>Direct Messages</h3>
-                <button
-                  className="toggle-users-button"
-                  onClick={() => setShowUserList(!showUserList)}
-                >
-                  {showUserList ? 'Hide Users' : 'Show All Users'}
-                </button>
-              </div>
-              
-              {/* Recent DMs Section */}
-              {showRecentDMs && (
-                <div className="recent-dms">
-                  <div className="section-header">
-                    <h4>Recent Conversations</h4>
-                  </div>
-                  
-                  {conversationsLoading ? (
-                    <div className="loading">Loading conversations...</div>
-                  ) : (
-                    directConversations.length > 0 ? (
-                      <ul>
-                        {filteredDirectMessages.map(conversation => (
-                          <li 
-                            key={conversation._id} 
-                            className={activeConversation?._id === conversation._id ? 'active' : ''}
-                            onClick={() => handleDirectMessageSelect(conversation)}
-                          >
-                            <UserAvatar 
-                              src={getProfilePicture(conversation.profilePicture)} 
-                              username={conversation.username}
-                              status={conversation.status || 'offline'}
-                            />
-                            <span className="user-name">{conversation.username}</span>
-                            <div className="conversation-meta">
-                              {conversation.lastMessage && (
-                                <span className="last-message-time">
-                                  {formatTime(conversation.lastMessage.timestamp)}
-                                </span>
-                              )}
-                              {unreadMessages[conversation._id] > 0 && (
-                                <span className="unread-badge">{unreadMessages[conversation._id]}</span>
-                              )}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="empty-state">No recent conversations</div>
-                    )
-                  )}
-                </div>
-              )}
+          {activeToggle === 'messages' && (
+            <>
+              {renderDirectMessages()}
+              {renderRecentDMs()}
               
               {/* User List for Starting New Conversations */}
               {showUserList && (
-                <div className="user-list">
-                  <div className="section-header">
-                    <h4>All Users</h4>
+                <div className="user-list-section">
+                  <div className="channels-header">
+                    <span>All Users</span>
                   </div>
-                  
-                  <ul>
-                    {filteredUsers.map(user => (
-                      <li 
-                        key={user._id}
-                        onClick={() => handleStartDirectMessage(user)}
-                      >
-                        <UserAvatar 
-                          src={getProfilePicture(user.profilePicture)} 
-                          username={user.username}
-                          status={user.status || 'offline'}
-                        />
-                        <span className="user-name">{user.username}</span>
-                      </li>
-                    ))}
+                  <ul className="direct-messages-list">
+                    {getFilteredUsers()
+                      .filter(u => u._id !== user._id && !directConversations.some(c => c._id === u._id))
+                      .map(u => (
+                        <li 
+                          key={u._id} 
+                          className="dm-item"
+                          onClick={() => handleStartDirectMessage(u)}
+                        >
+                          <div className="user-avatar">
+                            {u.username.charAt(0)}
+                          </div>
+                          <span className="username">{u.username}</span>
+                        </li>
+                      ))
+                    }
                   </ul>
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
         
-        {/* Main Chat Area */}
-        <div className="chat-area">
-          {/* Chat Header */}
-          <div className="chat-header">
-            {activeConversation && (
-              <>
-                {conversationType === 'channel' ? (
-                  <div className="channel-info">
-                    <span className="channel-icon">{activeConversation.icon}</span>
-                    <h2>{activeConversation.name}</h2>
-                  </div>
+        {/* Main Content */}
+        <div className="main-content">
+          {activeConversation ? (
+            <>
+              {/* Chat Header */}
+              <div className="chat-header">
+                <div className="chat-title">
+                  {conversationType === 'channel' 
+                    ? `# ${typeof activeConversation === 'string' 
+                        ? activeConversation 
+                        : activeConversation.name}`
+                    : activeConversation.username}
+                </div>
+              </div>
+              
+              {/* Messages Container */}
+              <div className="messages-container" ref={messagesEndRef}>
+                {messagesLoading ? (
+                  <div className="loading-messages">Loading messages...</div>
                 ) : (
-                  <div className="user-info">
-                    <UserAvatar 
-                      src={getProfilePicture(activeConversation.profilePicture)} 
-                      username={activeConversation.username}
-                      status={activeConversation.status || 'offline'}
-                    />
-                    <h2>{activeConversation.username}</h2>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-          
-          {/* Messages */}
-          <div className="messages-container">
-            {messagesLoading ? (
-              <div className="loading-messages">Loading messages...</div>
-            ) : (
-              <>
-                {messages.length === 0 ? (
-                  <div className="no-messages">
-                    {conversationType === 'channel' 
-                      ? 'No messages in this channel yet. Be the first to send a message!' 
-                      : 'No messages in this conversation yet. Say hello!'}
-                  </div>
-                ) : (
-                  <div className="messages">
-                    {messages.map((msg) => (
+                  <div className="messages-list">
+                    {messages.map(msg => (
                       <div 
                         key={msg._id} 
                         className={`message ${isCurrentUser(msg.sender?._id) ? 'sent' : 'received'} ${msg.isDeleted ? 'deleted' : ''} ${msg.pending ? 'pending' : ''}`}
@@ -484,30 +472,43 @@ const MessagingHub = () => {
                     <div ref={messagesEndRef} />
                   </div>
                 )}
-              </>
-            )}
-          </div>
-          
-          {/* Message Input */}
-          <form className="message-form" onSubmit={handleSendMessage}>
-            <input
-              type="text"
-              placeholder={activeConversation 
-                ? `Message ${conversationType === 'channel' ? '#' + activeConversation.name : activeConversation.username}` 
-                : 'Select a conversation'}
-              value={message}
-              onChange={handleMessageInputChange}
-              disabled={!activeConversation || !connected}
-              className="message-input"
-            />
-            <button 
-              type="submit" 
-              disabled={!message.trim() || !activeConversation || !connected}
-              className="send-button"
-            >
-              Send
-            </button>
-          </form>
+              </div>
+              
+              {/* Message Input */}
+              <div className="message-input-container">
+                <form className="message-form" onSubmit={handleSendMessage}>
+                  <textarea
+                    className="message-input"
+                    value={message}
+                    onChange={handleMessageInputChange}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage(e);
+                      }
+                    }}
+                    placeholder="Type a message..."
+                    disabled={!connected}
+                  />
+                  <button 
+                    className="send-button" 
+                    type="submit"
+                    disabled={!message.trim() || !connected}
+                  >
+                    Send
+                  </button>
+                </form>
+              </div>
+            </>
+          ) : (
+            <div className="welcome-container">
+              <div className="welcome-icon">💬</div>
+              <h2 className="welcome-title">Welcome to Instant Chat</h2>
+              <p className="welcome-description">
+                Select a channel or direct message to start chatting.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

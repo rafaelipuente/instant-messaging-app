@@ -1,62 +1,92 @@
 const express = require('express');
 const router = express.Router();
-const Message = require('../models/messageModel');
+const { Message, VALID_CHANNELS } = require('../models/messageModel');
 const User = require('../models/userModel');
+const Conversation = require('../models/channelModel');
 const auth = require('../middleware/auth');
 const path = require('path');
 
-// List all available public channels
+/**
+ * MESSAGE ROUTES
+ * --------------
+ * This file handles both public channel messages and direct messages.
+ * Routes are organized in two sections:
+ * 1. Public Channel Routes - for group conversations
+ * 2. Direct Message Routes - for 1-on-1 messaging
+ */
+
+//===================================================================
+// PUBLIC CHANNEL ROUTES
+//===================================================================
+
+/**
+ * List all available public channels
+ * @route GET /api/messages/channels
+ * @auth Required
+ * @returns {Array} List of valid channel names
+ */
 router.get('/channels', auth, async (req, res) => {
   try {
-    const channels = ['general', 'tech-talk', 'random', 'music'];
-    res.json(channels);
+    res.json(VALID_CHANNELS);
   } catch (error) {
     console.error('Error fetching channels:', error);
     res.status(500).json({ error: 'Failed to fetch channels' });
   }
 });
 
-// Get messages for a channel with pagination and caching
+/**
+ * Get messages for a specific channel with pagination
+ * @route GET /api/messages/channel/:channelName
+ * @auth Required
+ * @param {string} channelName - Name of the channel (lowercase)
+ * @query {number} limit - Max number of messages to return (default: 50)
+ * @query {string} before - Timestamp to paginate before
+ * @returns {Array} Channel messages
+ */
 router.get('/channel/:channelName', auth, async (req, res) => {
   try {
     const { limit = 50, before } = req.query;
     const channelName = req.params.channelName.toLowerCase();
     
     // Validate if it's a public channel
-    const validChannels = ['general', 'tech-talk', 'random', 'music'];
-    if (!validChannels.includes(channelName)) {
+    if (!VALID_CHANNELS.includes(channelName)) {
       return res.status(404).json({ error: 'Channel not found' });
     }
 
-    const query = {
+    // Query conditions
+    const queryConditions = {
       channel: channelName,
       messageType: 'channel'
     };
-
+    
+    // Add before condition if provided
     if (before) {
-      query.timestamp = { $lt: new Date(before) };
+      queryConditions.createdAt = { $lt: new Date(before) };
     }
-
-    const messages = await Message.find(query)
-      .sort({ timestamp: -1 })
+    
+    // Find messages and populate sender
+    const messages = await Message.find(queryConditions)
+      .sort({ createdAt: -1 })
       .limit(parseInt(limit))
-      .populate('sender', 'username profilePicture')
+      .populate('sender', 'username profilePicture status')
       .lean();
-
+      
     // Transform messages for client
-    const transformedMessages = messages.map(msg => ({
-      _id: msg._id,
-      content: msg.content,
-      timestamp: msg.timestamp,
-      messageType: msg.messageType,
-      channel: msg.channel,
+    const transformedMessages = messages.map(message => ({
+      _id: message._id,
+      content: message.content,
       sender: {
-        _id: msg.sender._id,
-        username: msg.sender.username,
-        profilePicture: msg.sender.profilePicture ? `/uploads/${path.basename(msg.sender.profilePicture)}` : null
-      }
+        _id: message.sender._id,
+        username: message.sender.username,
+        profilePicture: message.sender.profilePicture ? 
+          `/uploads/${path.basename(message.sender.profilePicture)}` : null,
+        status: message.sender.status
+      },
+      channel: message.channel,
+      createdAt: message.createdAt,
+      updatedAt: message.updatedAt
     }));
-
+    
     res.json(transformedMessages.reverse());
   } catch (error) {
     console.error('Error fetching channel messages:', error);
@@ -64,176 +94,137 @@ router.get('/channel/:channelName', auth, async (req, res) => {
   }
 });
 
-// Get messages between two users with pagination
-router.get('/direct/:userId', auth, async (req, res) => {
+//===================================================================
+// DIRECT MESSAGE ROUTES
+//===================================================================
+
+/**
+ * Get all direct message conversations for the current user
+ * @route GET /api/messages/direct/conversations
+ * @auth Required
+ * @returns {Array} List of direct message conversations
+ */
+router.get('/direct/conversations', auth, async (req, res) => {
   try {
-    const currentUserId = req.user._id;
-    const otherUserId = req.params.userId;
-    const chatId = Message.generateChatId(currentUserId, otherUserId);
-
-    console.log(`Fetching direct messages for chat ID: ${chatId}`);
-
-    const messages = await Message.find({
-      channel: chatId,
-      messageType: 'direct'
-    })
-      .sort({ timestamp: 1 })
-      .populate('sender', 'username profilePicture')
-      .populate('receiver', 'username profilePicture')
-      .lean();
-
-    console.log(`Found ${messages.length} messages for chat ID: ${chatId}`);
-
-    // Transform messages for client
-    const transformedMessages = messages.map(msg => ({
-      _id: msg._id,
-      content: msg.content,
-      timestamp: msg.timestamp,
-      messageType: msg.messageType,
-      channel: msg.channel,
-      sender: {
-        _id: msg.sender._id,
-        username: msg.sender.username,
-        profilePicture: msg.sender.profilePicture ? `/uploads/${path.basename(msg.sender.profilePicture)}` : null
-      },
-      receiver: {
-        _id: msg.receiver._id,
-        username: msg.receiver.username,
-        profilePicture: msg.receiver.profilePicture ? `/uploads/${path.basename(msg.receiver.profilePicture)}` : null
-      }
-    }));
-
-    res.json(transformedMessages);
+    const userId = req.user._id;
+    
+    // Get user with populated conversations
+    const user = await User.findById(userId)
+      .populate({
+        path: 'conversations.conversationId',
+        match: { type: 'direct' },
+        populate: {
+          path: 'participants',
+          select: 'username profilePicture status lastSeen'
+        }
+      });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Format conversations for response
+    const conversations = user.conversations
+      .filter(conv => conv.conversationId && conv.conversationId.type === 'direct')
+      .map(conv => {
+        const conversation = conv.conversationId;
+        const otherUser = conversation.participants.find(p => 
+          !p._id.equals(userId)
+        );
+        
+        return {
+          _id: conversation._id,
+          name: conversation.name,
+          displayName: `Chat with ${otherUser?.username || 'Unknown'}`,
+          otherUser: otherUser || null,
+          unreadCount: conv.unreadCount,
+          lastViewedAt: conv.lastViewedAt
+        };
+      });
+    
+    res.json(conversations);
   } catch (error) {
-    console.error('Error fetching direct messages:', error);
-    console.error('Error details:', error.stack);
-    res.status(500).json({ error: 'Failed to fetch messages' });
+    console.error('Error fetching conversations:', error);
+    res.status(500).json({ error: 'Failed to fetch conversations' });
   }
 });
 
-// Store a new channel message
-router.post('/channel/:channelName', auth, async (req, res) => {
-  try {
-    const { content } = req.body;
-    const channelName = req.params.channelName.toLowerCase();
-
-    const message = new Message({
-      sender: req.user._id,
-      content,
-      channel: channelName,
-      messageType: 'channel'
-    });
-
-    await message.save();
-    await message.populate('sender', 'username profilePicture');
-
-    // Transform message for response
-    const transformedMessage = {
-      _id: message._id,
-      content: message.content,
-      timestamp: message.timestamp,
-      messageType: message.messageType,
-      channel: message.channel,
-      sender: {
-        _id: message.sender._id,
-        username: message.sender.username,
-        profilePicture: message.sender.profilePicture ? `/uploads/${path.basename(message.sender.profilePicture)}` : null
-      }
-    };
-
-    res.status(201).json(transformedMessage);
-  } catch (error) {
-    console.error('Error saving channel message:', error);
-    res.status(500).json({ error: 'Failed to save message' });
-  }
-});
-
-// Store a new direct message
+/**
+ * Send a direct message to a user
+ * @route POST /api/messages/direct/:userId
+ * @auth Required
+ * @param {string} userId - Recipient's user ID
+ * @body {string} content - Message content
+ * @returns {Object} Created message
+ */
 router.post('/direct/:userId', auth, async (req, res) => {
   try {
     const { content } = req.body;
     const senderId = req.user._id;
     const receiverId = req.params.userId;
-    const chatId = Message.generateChatId(senderId, receiverId);
+    
+    if (!content || content.trim() === '') {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
 
-    console.log(`Creating direct message in chat ID: ${chatId}`);
-    console.log(`Sender: ${senderId}, Receiver: ${receiverId}`);
+    // Find or create conversation
+    let conversation = await Conversation.findOne({
+      type: 'direct',
+      participants: { $all: [senderId, receiverId] }
+    });
 
-    const message = new Message({
+    if (!conversation) {
+      // Create a new conversation
+      conversation = new Conversation({
+        type: 'direct',
+        participants: [senderId, receiverId],
+        name: `direct-${senderId}-${receiverId}`
+      });
+      await conversation.save();
+
+      // Add to both users' conversations
+      await User.updateOne(
+        { _id: senderId },
+        { $addToSet: { conversations: { conversationId: conversation._id } } }
+      );
+      
+      await User.updateOne(
+        { _id: receiverId },
+        { $addToSet: { conversations: { conversationId: conversation._id } } }
+      );
+    }
+
+    // Create new message
+    const newMessage = new Message({
+      content,
       sender: senderId,
       receiver: receiverId,
-      content,
-      channel: chatId,
+      conversation: conversation._id,
       messageType: 'direct'
     });
 
-    await message.save();
-    await message.populate('sender', 'username profilePicture');
-    await message.populate('receiver', 'username profilePicture');
-
-    // Add users to each other's open chats if not already there
-    const [sender, receiver] = await Promise.all([
-      User.findById(senderId),
-      User.findById(receiverId)
-    ]);
-
-    if (!sender.openChats.includes(receiverId)) {
-      sender.openChats.push(receiverId);
-      await sender.save();
-    }
-
-    if (!receiver.openChats.includes(senderId)) {
-      receiver.openChats.push(senderId);
-      await receiver.save();
-    }
-
-    // Transform message for response
-    const transformedMessage = {
-      _id: message._id,
-      content: message.content,
-      timestamp: message.timestamp,
-      messageType: message.messageType,
-      channel: message.channel,
+    await newMessage.save();
+    
+    // Populate sender info
+    await newMessage.populate('sender', 'username profilePicture status');
+    
+    // Format for response
+    const messageResponse = {
+      _id: newMessage._id,
+      content: newMessage.content,
       sender: {
-        _id: message.sender._id,
-        username: message.sender.username,
-        profilePicture: message.sender.profilePicture ? `/uploads/${path.basename(message.sender.profilePicture)}` : null
+        _id: newMessage.sender._id,
+        username: newMessage.sender.username,
+        profilePicture: newMessage.sender.profilePicture ? 
+          `/uploads/${path.basename(newMessage.sender.profilePicture)}` : null
       },
-      receiver: {
-        _id: message.receiver._id,
-        username: message.receiver.username,
-        profilePicture: message.receiver.profilePicture ? `/uploads/${path.basename(message.receiver.profilePicture)}` : null
-      }
+      createdAt: newMessage.createdAt
     };
-
-    console.log('Direct message saved successfully');
-    res.status(201).json(transformedMessage);
+    
+    res.status(201).json(messageResponse);
   } catch (error) {
-    console.error('Error saving direct message:', error);
-    console.error('Error details:', error.stack);
-    res.status(500).json({ error: 'Failed to save message' });
-  }
-});
-
-// Delete a message
-router.delete('/:messageId', auth, async (req, res) => {
-  try {
-    const message = await Message.findById(req.params.messageId);
-    
-    if (!message) {
-      return res.status(404).json({ error: 'Message not found' });
-    }
-    
-    // Check if user is authorized to delete this message
-    if (message.sender.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ error: 'Not authorized to delete this message' });
-    }
-    
-    await Message.findByIdAndDelete(req.params.messageId);
-    res.json({ message: 'Message deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting message:', error);
-    res.status(500).json({ error: 'Failed to delete message' });
+    console.error('Error sending direct message:', error);
+    res.status(500).json({ error: 'Failed to send message' });
   }
 });
 

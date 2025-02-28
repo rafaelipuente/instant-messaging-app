@@ -10,6 +10,7 @@ const messageSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  // Optional receiver for direct messages
   receiver: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -19,111 +20,106 @@ const messageSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  // Channel name for public messages, null for direct messages
+  channel: {
+    type: String,
+    enum: [...VALID_CHANNELS, null],
+    default: null
+  },
   timestamp: {
     type: Date,
     default: Date.now
   },
-  read: {
+  isDeleted: {
     type: Boolean,
     default: false
-  },
-  // Can be either a chatId for DMs or a channel name for general chats
-  channel: {
-    type: String,
-    required: true
-  },
-  messageType: {
-    type: String,
-    enum: ['direct', 'channel'],
-    required: true
-  },
-  // Room field for public chat rooms
-  room: {
-    type: String,
-    required: function() {
-      return this.messageType === 'channel';
-    }
   }
 }, {
   timestamps: true
 });
 
-// Create compound indexes for efficient retrieval
-messageSchema.index({ channel: 1, timestamp: -1 });
+// Create appropriate compound indexes
 messageSchema.index({ sender: 1, receiver: 1, timestamp: -1 });
-messageSchema.index({ messageType: 1, channel: 1, timestamp: -1 });
+messageSchema.index({ channel: 1, timestamp: -1 });
 
-// Validate channel names
-messageSchema.pre('save', function(next) {
-  if (this.messageType === 'channel') {
-    this.channel = this.channel.toLowerCase();
-    if (!VALID_CHANNELS.includes(this.channel)) {
-      next(new Error('Invalid channel name'));
-      return;
-    }
-  }
-  next();
+// Helper to determine if message is direct or channel
+messageSchema.virtual('messageType').get(function() {
+  return this.channel ? 'channel' : 'direct';
 });
 
-// Add static method to fetch channel messages
-messageSchema.statics.getChannelMessages = async function(channel, limit = 50, before = null) {
-  const query = {
-    channel: channel.toLowerCase(),
-    messageType: 'channel'
-  };
-
-  if (before) {
-    query.timestamp = { $lt: new Date(before) };
+// Static method to get channel messages
+messageSchema.statics.getChannelMessages = async function(channel, limit = 50) {
+  if (!VALID_CHANNELS.includes(channel)) {
+    throw new Error('Invalid channel name');
   }
-
-  return this.find(query)
-    .sort({ timestamp: -1 })
-    .limit(parseInt(limit))
-    .populate('sender', 'username profilePicture')
+  
+  return this.find({ 
+    channel: channel,
+    isDeleted: false
+  })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .populate('sender', 'username profilePicture status')
     .lean();
 };
 
-// Virtual for populating user details
-messageSchema.virtual('senderDetails', {
-  ref: 'User',
-  localField: 'sender',
-  foreignField: '_id',
-  justOne: true
-});
+// Static method to get DM conversation
+messageSchema.statics.getDirectMessages = async function(userId1, userId2, limit = 50) {
+  return this.find({
+    $or: [
+      { sender: userId1, receiver: userId2, isDeleted: false },
+      { sender: userId2, receiver: userId1, isDeleted: false }
+    ]
+  })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .populate('sender', 'username profilePicture status')
+    .populate('receiver', 'username profilePicture status')
+    .lean();
+};
 
-messageSchema.virtual('receiverDetails', {
-  ref: 'User',
-  localField: 'receiver',
-  foreignField: '_id',
-  justOne: true
-});
-
-// Generate unique chat ID for two users
+// Helper function to generate a consistent chat ID for two users
 messageSchema.statics.generateChatId = function(userId1, userId2) {
-  // Sort IDs to ensure consistency
+  // Sort IDs to ensure consistency regardless of parameter order
   const sortedIds = [userId1.toString(), userId2.toString()].sort();
-  return `dm-${sortedIds[0]}-${sortedIds[1]}`;
+  return `${sortedIds[0]}_${sortedIds[1]}`;
 };
 
 // Transform message for client
 messageSchema.methods.toClientJSON = function() {
-  return {
+  const sender = this.sender;
+  const receiver = this.receiver;
+  
+  const response = {
     _id: this._id,
     content: this.content,
-    timestamp: this.timestamp,
-    messageType: this.messageType,
-    channel: this.channel,
+    timestamp: this.createdAt,
+    isDeleted: this.isDeleted,
     sender: {
-      _id: this.sender._id,
-      username: this.sender.username,
-      profilePicture: this.sender.profilePicture ? `/uploads/${path.basename(this.sender.profilePicture)}` : null
-    },
-    receiver: this.receiver ? {
-      _id: this.receiver._id,
-      username: this.receiver.username,
-      profilePicture: this.receiver.profilePicture ? `/uploads/${path.basename(this.receiver.profilePicture)}` : null
-    } : null
+      _id: sender._id,
+      username: sender.username,
+      profilePicture: sender.profilePicture ? 
+        `/uploads/${path.basename(sender.profilePicture)}` : null
+    }
   };
+
+  if (this.channel) {
+    response.channel = this.channel;
+  }
+
+  if (receiver) {
+    response.receiver = {
+      _id: receiver._id,
+      username: receiver.username,
+      profilePicture: receiver.profilePicture ? 
+        `/uploads/${path.basename(receiver.profilePicture)}` : null
+    };
+  }
+
+  return response;
 };
 
-module.exports = mongoose.model('Message', messageSchema);
+module.exports = {
+  Message: mongoose.model('Message', messageSchema),
+  VALID_CHANNELS
+};

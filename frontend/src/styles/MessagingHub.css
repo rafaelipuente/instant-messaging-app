@@ -1,0 +1,369 @@
+/* MessagingHub.css */
+
+.messaging-hub {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #1e1f2c;
+}
+
+.messaging-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Make sidebar more compact */
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background-color: #2a2d3e;
+  color: #eef0f3;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #3a3d52;
+  overflow: hidden;
+}
+
+/* Improve search container styling */
+.search-container {
+  padding: 8px;
+  border-bottom: 1px solid #3a3d52;
+}
+
+.search-input {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 4px;
+  border: 1px solid #3a3d52;
+  background-color: #383c52;
+  color: #eef0f3;
+  font-size: 13px;
+}
+
+.search-input::placeholder {
+  color: #9ca4b8;
+}
+
+/* Make toggle container more compact */
+.toggle-container {
+  display: flex;
+  border-bottom: 1px solid #3a3d52;
+  padding: 0;
+  height: 36px;
+}
+
+.sidebar-toggle .toggle-btn {
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: #adb5bd;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+}
+
+.sidebar-toggle .toggle-btn.active {
+  color: #fff;
+  background-color: rgba(59, 130, 246, 0.2);
+}
+
+.sidebar-toggle .toggle-btn:hover:not(.active) {
+  color: #e9ecef;
+}
+
+.toggle-btn {
+  flex: 1;
+  background: none;
+  color: #9ca4b8;
+  border: none;
+  padding: 8px 5px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 13px;
+  text-align: center;
+}
+
+.toggle-btn.active {
+  color: #eef0f3;
+  border-bottom: 2px solid #3b82f6;
+  background-color: #383c52;
+}
+
+.toggle-btn:hover:not(.active) {
+  background-color: #323548;
+}
+
+/* Channels section styling */
+.channels-section {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.channels-header, .recent-dms-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  color: #adb5bd;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.create-channel-btn {
+  background: none;
+  border: none;
+  color: #9ca4b8;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.create-channel-btn:hover:not(:disabled) {
+  color: #eef0f3;
+  background-color: #383c52;
+}
+
+.create-channel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.create-dm-btn {
+  background: none;
+  border: none;
+  color: #adb5bd;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.create-dm-btn:hover {
+  color: #fff;
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.channels-list,
+.direct-messages-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.channel-item,
+.dm-item {
+  padding: 6px 10px;
+  margin: 2px 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: #9ca4b8;
+  transition: all 0.2s;
+}
+
+.channel-item:hover:not(.active),
+.dm-item:hover:not(.active) {
+  background-color: #323548;
+  color: #eef0f3;
+}
+
+.channel-item.active,
+.dm-item.active {
+  background-color: #3b82f6;
+  color: #ffffff;
+}
+
+.dm-item .user-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  margin-right: 8px;
+  background-color: #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: white;
+  text-transform: uppercase;
+}
+
+.dm-item .username {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Recent DMs section */
+.recent-dms-section {
+  padding: 8px 0;
+  border-top: 1px solid #3a3d52;
+}
+
+/* Main chat area */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.chat-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid #e1e4e8;
+  display: flex;
+  align-items: center;
+  background-color: #ffffff;
+  height: 48px;
+}
+
+.chat-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.chat-subtitle {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-error {
+  color: #b91c1c;
+  font-size: 14px;
+  text-align: center;
+  padding: 10px;
+  background-color: #fee2e2;
+  border-radius: 4px;
+  margin: 10px 0;
+}
+
+.message-input-container {
+  padding: 10px 16px 16px;
+  border-top: 1px solid #e1e4e8;
+  background-color: #ffffff;
+}
+
+.message-form {
+  display: flex;
+  gap: 10px;
+}
+
+.message-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  resize: none;
+  min-height: 42px;
+  max-height: 120px;
+  background-color: #ffffff;
+  transition: border-color 0.2s;
+}
+
+.message-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
+}
+
+.send-button {
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.send-button:hover {
+  background-color: #2563eb;
+}
+
+.send-button:disabled {
+  background-color: #93c5fd;
+  cursor: not-allowed;
+}
+
+/* Welcome state */
+.welcome-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+  flex-direction: column;
+  padding: 20px;
+  text-align: center;
+}
+
+.welcome-icon {
+  font-size: 48px;
+  color: #3b82f6;
+  margin-bottom: 16px;
+}
+
+.welcome-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.welcome-description {
+  font-size: 15px;
+  color: #64748b;
+  max-width: 500px;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+/* Typing indicator */
+.typing-indicator {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  padding: 4px 0;
+  height: 20px;
+}

@@ -9,8 +9,8 @@ const Home = () => {
   return (
     <div className="home-container">
       <div className="home-content">
-        <h1>Welcome to Chat App</h1>
-        <p>Connect with friends instantly</p>
+        <h1>Welcome to Simplified Chat App</h1>
+        <p>Connect with friends instantly through our streamlined interface</p>
         
         <div className="home-buttons">
           {user ? (
@@ -36,11 +36,11 @@ const Home = () => {
           </div>
           <div className="feature">
             <h3>Simple & Fast</h3>
-            <p>Easy to use interface</p>
+            <p>Streamlined code and intuitive UX</p>
           </div>
           <div className="feature">
-            <h3>Secure</h3>
-            <p>Your messages are protected</p>
+            <h3>Unified Messaging</h3>
+            <p>Channels and direct messages in one place</p>
           </div>
         </div>
       </div>

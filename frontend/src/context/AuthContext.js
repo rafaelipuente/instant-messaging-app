@@ -36,6 +36,7 @@ export const AuthProvider = ({ children }) => {
       }
     } else {
       localStorage.removeItem('user');
+      localStorage.removeItem('openChats');
     }
   }, [user]);
 
@@ -50,9 +51,13 @@ export const AuthProvider = ({ children }) => {
         userData.profilePicture = getFullProfilePictureUrl(userData.profilePicture);
       }
 
+      // Try to restore saved open chats from localStorage
+      const savedOpenChats = localStorage.getItem('openChats');
+      const openChats = savedOpenChats ? JSON.parse(savedOpenChats) : [];
+
       setUser({
         ...userData,
-        openChats: userData.openChats || []
+        openChats: userData.openChats || openChats || []
       });
     } catch (error) {
       console.error('Error in login:', error);
@@ -92,10 +97,21 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateOpenChats = (newOpenChats) => {
-    setUser(prev => ({
-      ...prev,
-      openChats: newOpenChats
-    }));
+    if (!Array.isArray(newOpenChats)) {
+      console.error('Invalid open chats format:', newOpenChats);
+      return;
+    }
+    
+    setUser(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        openChats: newOpenChats
+      };
+    });
+    
+    // Also update in localStorage for persistence
+    localStorage.setItem('openChats', JSON.stringify(newOpenChats));
   };
 
   const addNotification = (notification) => {
@@ -139,11 +155,21 @@ export const AuthProvider = ({ children }) => {
         if (userData.profilePicture) {
           userData.profilePicture = getFullProfilePictureUrl(userData.profilePicture);
         }
+        
+        // Try to restore saved open chats from localStorage
+        const savedOpenChats = localStorage.getItem('openChats');
+        if (savedOpenChats) {
+          userData.openChats = JSON.parse(savedOpenChats);
+        } else if (!userData.openChats) {
+          userData.openChats = [];
+        }
+        
         setUser(userData);
       }
     } catch (error) {
       console.error('Error loading user from localStorage:', error);
       localStorage.removeItem('user');
+      localStorage.removeItem('openChats');
     } finally {
       setLoading(false);
     }

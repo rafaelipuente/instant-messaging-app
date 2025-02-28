@@ -7,8 +7,7 @@ const auth = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const Message = require('../models/messageModel'); // Assuming Message model is defined in messageModel.js
-const DirectMessage = require('../models/directMessageModel'); // Assuming DirectMessage model is defined in directMessageModel.js
+const { Message, VALID_CHANNELS } = require('../models/messageModel'); // Using the unified message model
 
 // Load environment variables
 require('dotenv').config();
@@ -129,54 +128,71 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login user
+// Login route
 router.post('/login', async (req, res) => {
   try {
+    console.log('Login attempt received:', { 
+      username: req.body.username,
+      hasPassword: req.body.password ? 'Yes' : 'No'
+    });
+    
     const { username, password } = req.body;
+    
+    if (!username || !password) {
+      console.error('Login failed: Missing credentials');
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
 
     // Find user by username
-    const user = await User.findOne({ username: username.toLowerCase() })
-      .populate('openChats', 'username profilePicture status');
+    console.log('Finding user with username:', username.toLowerCase());
+    const user = await User.findOne({ username: username.toLowerCase() });
 
     if (!user) {
+      console.error('Login failed: User not found -', username.toLowerCase());
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
+    console.log('User found, comparing password');
+    
     // Compare password
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid username or password' });
+    try {
+      const isMatch = await user.comparePassword(password);
+      console.log('Password comparison result:', isMatch);
+      
+      if (!isMatch) {
+        console.error('Login failed: Invalid password for user', username.toLowerCase());
+        return res.status(401).json({ error: 'Invalid username or password' });
+      }
+    } catch (passwordError) {
+      console.error('Error comparing password:', passwordError);
+      return res.status(500).json({ error: 'Error validating credentials' });
     }
 
     // Generate JWT token
+    console.log('Generating JWT token');
     const token = jwt.sign(
       { _id: user._id, username: user.username },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    // Transform open chats data
-    const openChats = user.openChats.map(chat => ({
-      _id: chat._id,
-      username: chat.username,
-      status: chat.status,
-      profilePicture: chat.profilePicture ? `/uploads/${path.basename(chat.profilePicture)}` : null
-    }));
-
-    // Return user data and token
+    console.log('Login successful for user:', username.toLowerCase());
+    
+    // Return user data and token, handling the case where openChats might not exist
     res.json({
       user: {
         _id: user._id,
         username: user.username,
         profilePicture: user.profilePicture ? `/uploads/${path.basename(user.profilePicture)}` : null,
         status: user.status,
-        openChats: openChats
+        openChats: [] // Providing an empty array instead of trying to access a field that might not exist
       },
       token
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Server error during login' });
   }
 });
 
@@ -325,26 +341,20 @@ router.delete('/delete-all-data', async (req, res) => {
     // Delete all messages
     await Message.deleteMany({});
     
-    // Delete all direct messages
-    await DirectMessage.deleteMany({});
-    
     // Verify counts
     const userCount = await User.countDocuments();
     const messageCount = await Message.countDocuments();
-    const dmCount = await DirectMessage.countDocuments();
     
     console.log('All data deleted. Counts:', {
       users: userCount,
-      messages: messageCount,
-      directMessages: dmCount
+      messages: messageCount
     });
     
     res.json({ 
       message: 'All data deleted',
       counts: {
         users: userCount,
-        messages: messageCount,
-        directMessages: dmCount
+        messages: messageCount
       }
     });
   } catch (error) {

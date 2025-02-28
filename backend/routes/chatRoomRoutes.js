@@ -1,6 +1,7 @@
 const express = require('express');
 const { protect } = require('../middleware/authMiddleware');
-const ChatRoom = require('../models/chatRoomModel');
+const Conversation = require('../models/channelModel');
+const User = require('../models/userModel');
 
 const router = express.Router();
 
@@ -8,7 +9,12 @@ const router = express.Router();
 router.get('/', protect, async (req, res) => {
     try {
         console.log('Fetching all chat rooms...');
-        const chatRooms = await ChatRoom.find();
+        // Only get non-default chat rooms (custom group chats)
+        const chatRooms = await Conversation.find({
+            type: 'channel',
+            isDefaultChannel: false
+        }).populate('createdBy', 'username profilePicture');
+        
         res.status(200).json(chatRooms);
     } catch (error) {
         console.error('Error fetching chat rooms:', error.message);
@@ -20,7 +26,7 @@ router.get('/', protect, async (req, res) => {
 router.delete('/:id', protect, async (req, res) => {
     try {
         console.log(`Attempting to delete chat room with ID: ${req.params.id}`);
-        const chatRoom = await ChatRoom.findById(req.params.id);
+        const chatRoom = await Conversation.findById(req.params.id);
 
         if (!chatRoom) {
             console.log('Chat room not found');
@@ -29,12 +35,19 @@ router.delete('/:id', protect, async (req, res) => {
 
         // Check if the authenticated user is the creator of the chat room
         if (chatRoom.createdBy.toString() !== req.user._id.toString()) {
-            console.log(`User ${req.user._id} not authorized to delete chat room ${req.params.id}`);
-            return res.status(403).json({ message: 'Not authorized to delete this chat room' });
+            console.log('User not authorized to delete this chat room');
+            return res.status(401).json({ message: 'User not authorized to delete this chat room' });
         }
 
-        await ChatRoom.deleteOne({ _id: chatRoom._id });
-        console.log(`Chat room ${req.params.id} deleted successfully`);
+        const result = await Conversation.findByIdAndDelete(req.params.id);
+        
+        // Remove this chat room from all users' conversations
+        await User.updateMany(
+            { 'conversations.conversationId': req.params.id },
+            { $pull: { conversations: { conversationId: req.params.id } } }
+        );
+        
+        console.log('Chat room deleted successfully');
         res.status(200).json({ message: 'Chat room deleted successfully' });
     } catch (error) {
         console.error('Error deleting chat room:', error.message);
@@ -43,24 +56,34 @@ router.delete('/:id', protect, async (req, res) => {
 });
 
 // POST: Create a new chat room
-router.post('/create', protect, async (req, res) => {
-    const { name } = req.body;
-
+router.post('/', protect, async (req, res) => {
     try {
-        if (!name) {
-            console.log('Chat room creation failed: Missing room name');
-            return res.status(400).json({ message: 'Please provide a room name' });
+        console.log('Creating new chat room with data:', req.body);
+        const { name, description } = req.body;
+
+        // Check if a chat room with this name already exists
+        const existingRoom = await Conversation.findOne({ name: name.toLowerCase() });
+        if (existingRoom) {
+            console.log('Chat room with this name already exists');
+            return res.status(400).json({ message: 'Chat room with this name already exists' });
         }
 
-        // Create the chat room
-        const chatRoom = await ChatRoom.create({
-            name,
-            createdBy: req.user._id, // Use the authenticated user's ID
-            participants: [req.user._id], // Add the creator as a participant
+        const newChatRoom = await Conversation.create({
+            name: name.toLowerCase(),
+            displayName: name,
+            description: description || '',
+            type: 'channel',
+            createdBy: req.user._id,
+            participants: [req.user._id],
+            isDefaultChannel: false
         });
 
-        console.log(`Chat room "${name}" created by user ${req.user._id}`);
-        res.status(201).json(chatRoom);
+        // Add this chat room to the creator's conversations
+        const user = await User.findById(req.user._id);
+        await user.addConversation(newChatRoom._id);
+
+        console.log('New chat room created successfully');
+        res.status(201).json(newChatRoom);
     } catch (error) {
         console.error('Error creating chat room:', error.message);
         res.status(500).json({ message: error.message });

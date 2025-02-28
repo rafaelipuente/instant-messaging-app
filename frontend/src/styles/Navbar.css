@@ -4,15 +4,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.875rem 2rem;
-  background-color: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 56px;
+  padding: 0.5rem 1rem;
+  background-color: #1a1b26;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  height: 48px;
   z-index: 1000;
 }
 
@@ -28,8 +24,8 @@
 }
 
 .navbar-brand {
-  font-size: 1.375rem;
-  font-weight: bold;
+  font-size: 1.25rem;
+  font-weight: 600;
   color: #2c3e50;
   text-decoration: none;
   display: flex;
@@ -49,7 +45,7 @@
 .navbar-menu {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .nav-link {
@@ -59,9 +55,10 @@
   color: var(--text-primary);
   text-decoration: none;
   font-weight: 500;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
   transition: all 0.2s ease;
+  font-size: 0.9rem;
 }
 
 .nav-link:hover {
@@ -75,8 +72,8 @@
 }
 
 .nav-avatar {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -88,15 +85,15 @@
 .profile-button {
   background: none;
   border: none;
-  padding: 8px;
+  padding: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: #64748b;
-  font-size: 15px;
+  font-size: 0.9rem;
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: 4px;
   transition: all 0.2s ease;
 }
 
@@ -111,10 +108,10 @@
   right: 0;
   margin-top: 8px;
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  padding: 8px;
-  min-width: 200px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 6px;
+  min-width: 180px;
   z-index: 1000;
 }
 
@@ -122,11 +119,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 8px 12px;
   color: #64748b;
   text-decoration: none;
-  font-size: 14px;
-  border-radius: 6px;
+  font-size: 0.85rem;
+  border-radius: 4px;
   transition: all 0.2s ease;
   cursor: pointer;
 }
@@ -148,15 +145,20 @@
 .theme-toggle {
   background: none;
   border: none;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 50%;
-  transition: background-color 0.2s;
+  color: #64748b;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
 }
 
 .theme-toggle:hover {
-  background-color: var(--bg-tertiary);
+  color: #0284c7;
+  background: rgba(2, 132, 199, 0.05);
 }
 
 .logout-button {
@@ -194,7 +196,7 @@
 
   .navbar-menu {
     position: fixed;
-    top: 56px;
+    top: 48px;
     left: 0;
     right: 0;
     background: white;
