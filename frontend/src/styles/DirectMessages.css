@@ -191,6 +191,92 @@
   background-color: #0056b3;
 }
 
+/* Recent DMs section */
+.recent-dms {
+  margin-top: 15px;
+  margin-bottom: 20px;
+  overflow-y: auto;
+  border-bottom: 1px solid #e1e4e8;
+  padding-bottom: 15px;
+}
+
+.recent-dms h4 {
+  color: #495057;
+  font-size: 14px;
+  margin: 0 0 10px 15px;
+  font-weight: 600;
+}
+
+.section-header h4 {
+  color: #495057;
+  font-size: 14px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.toggle-users-button {
+  background-color: #f0f2f5;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #5c6780;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.toggle-users-button:hover {
+  background-color: #e4e6eb;
+}
+
+.empty-state {
+  color: #8d96a8;
+  font-size: 13px;
+  text-align: center;
+  padding: 15px;
+  font-style: italic;
+}
+
+.dm-list .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 15px 5px;
+}
+
+.user-list {
+  margin-top: 10px;
+  border-top: 1px solid #f0f2f5;
+  padding-top: 10px;
+}
+
+.user-list ul {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.dm-list ul li {
+  display: flex;
+  align-items: center;
+  padding: 8px 15px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-radius: 4px;
+  margin: 2px 8px;
+}
+
+.conversation-meta {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.last-message-time {
+  font-size: 11px;
+  color: #8d96a8;
+  margin-right: 8px;
+}
+
 /* Chat section */
 .chat-area {
   flex-grow: 1;
