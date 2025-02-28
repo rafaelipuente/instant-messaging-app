@@ -19,6 +19,7 @@ const MessagingHub = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeToggle, setActiveToggle] = useState('channels');
   const [showUserList, setShowUserList] = useState(false);
+  const [showOpenChats, setShowOpenChats] = useState(true);
   const [displayRecentDMs] = useState(true);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -61,6 +62,17 @@ const MessagingHub = () => {
       loadMessages(defaultChannel, 'channel');
     }
   }, [channels, activeConversation, setActiveConversation, setConversationType, loadMessages]);
+
+  // Debug channels and users - only log once when data changes
+  useEffect(() => {
+    if (channels.length > 0 || directConversations.length > 0 || users.length > 0) {
+      console.log('Data loaded:', {
+        channelsCount: channels.length,
+        directConversationsCount: directConversations.length,
+        usersCount: users.length
+      });
+    }
+  }, [channels.length, directConversations.length, users.length]);
   
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -78,14 +90,17 @@ const MessagingHub = () => {
   
   // Function to switch to a direct message conversation
   const handleDirectMessageSelect = (conversation) => {
+    console.log('Selecting direct conversation with:', conversation);
+    
+    // Set the active conversation and load messages
     setActiveConversation(conversation);
     setConversationType('direct');
     
     // First load the messages
-    const loadSuccess = loadMessages(conversation, 'direct');
+    loadMessages(conversation, 'direct');
     
     // Then mark them as read (if loading was successful)
-    if (loadSuccess && conversation._id && unreadMessages[conversation._id] > 0) {
+    if (conversation._id && unreadMessages[conversation._id] > 0) {
       // Add a slight delay to ensure messages are loaded first
       setTimeout(() => {
         markAsRead(conversation._id);
@@ -107,11 +122,26 @@ const MessagingHub = () => {
       console.log('Opening existing conversation:', existingConversation);
       handleDirectMessageSelect(existingConversation);
     } else {
-      // If not, create a new one
-      console.log('Creating new conversation with:', user.username);
-      const conversation = await startDirectConversation(user._id);
-      if (conversation) {
-        handleDirectMessageSelect(conversation);
+      try {
+        // If not, create a new one
+        console.log('Creating new conversation with:', user.username);
+        const conversation = await startDirectConversation(user._id);
+        if (conversation) {
+          // Format conversation with required fields if they're missing
+          const formattedConversation = {
+            ...conversation,
+            _id: conversation._id || user._id,
+            username: conversation.username || user.username
+          };
+          handleDirectMessageSelect(formattedConversation);
+          
+          // Ensure open chats are visible
+          setShowOpenChats(true);
+        } else {
+          console.error("Failed to create conversation", user);
+        }
+      } catch (error) {
+        console.error("Error starting direct message:", error);
       }
     }
     
@@ -202,18 +232,24 @@ const MessagingHub = () => {
   };
   
   // Filter channels based on search term
-  const getFilteredChannels = () => channels
-    .filter(channel => {
-      // Remove the "genral" channel and filter by search term
-      return channel.name.toLowerCase() !== 'genral' && 
-             channel.name.toLowerCase().includes(searchTerm.toLowerCase());
-    })
-    .sort((a, b) => {
-      // Sort by default channels first, then alphabetically
-      if (a.isDefaultChannel && !b.isDefaultChannel) return -1;
-      if (!a.isDefaultChannel && b.isDefaultChannel) return 1;
-      return a.name.localeCompare(b.name);
-    });
+  const getFilteredChannels = () => {
+    // Don't log on every render to avoid excessive console output
+    if (channels.length > 0) {
+      console.log(`Found ${channels.length} channels to filter`);
+    }
+    return channels
+      .filter(channel => {
+        // Remove the "genral" channel and filter by search term
+        return channel.name.toLowerCase() !== 'genral' && 
+               channel.name.toLowerCase().includes(searchTerm.toLowerCase());
+      })
+      .sort((a, b) => {
+        // Sort by default channels first, then alphabetically
+        if (a.isDefaultChannel && !b.isDefaultChannel) return -1;
+        if (!a.isDefaultChannel && b.isDefaultChannel) return 1;
+        return a.name.localeCompare(b.name);
+      });
+  };
   
   const getFilteredDirectMessages = () => directConversations.filter(conversation => 
     conversation.username?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -292,7 +328,7 @@ const MessagingHub = () => {
     return (
       <div className="direct-messages-section">
         <div className="channels-header">
-          <span>Direct Messages</span>
+          <span>Online User List</span>
           <button 
             className="create-dm-btn"
             onClick={() => setShowUserList(!showUserList)}
@@ -301,21 +337,37 @@ const MessagingHub = () => {
             +
           </button>
         </div>
-        <ul className="direct-messages-list">
-          {getFilteredDirectMessages().map(conversation => (
-            <li 
-              key={conversation._id} 
-              className={`dm-item ${conversationType === 'direct' && 
-                activeConversation && activeConversation._id === conversation._id ? 'active' : ''}`}
-              onClick={() => handleDirectMessageSelect(conversation)}
+        
+        {/* Open Chats Section */}
+        <div className="open-chats-section">
+          <div className="channels-header">
+            <span>Open Chats</span>
+            <button 
+              className="toggle-btn"
+              onClick={() => setShowOpenChats(!showOpenChats)}
+              title={showOpenChats ? "Hide open chats" : "Show open chats"}
             >
-              <div className="user-avatar">
-                {conversation.username.charAt(0)}
-              </div>
-              <span className="username">{conversation.username}</span>
-            </li>
-          ))}
-        </ul>
+              {showOpenChats ? "−" : "+"}
+            </button>
+          </div>
+          {showOpenChats && (
+            <ul className="direct-messages-list">
+              {getFilteredDirectMessages().map(conversation => (
+                <li 
+                  key={conversation._id} 
+                  className={`dm-item ${conversationType === 'direct' && 
+                    activeConversation && activeConversation._id === conversation._id ? 'active' : ''}`}
+                  onClick={() => handleDirectMessageSelect(conversation)}
+                >
+                  <div className="user-avatar">
+                    {conversation.username.charAt(0)}
+                  </div>
+                  <span className="username">{conversation.username}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     );
   };
@@ -389,10 +441,17 @@ const MessagingHub = () => {
                 <div className="user-list-section">
                   <div className="channels-header">
                     <span>All Users</span>
+                    <button 
+                      className="close-btn"
+                      onClick={() => setShowUserList(false)}
+                      title="Close user list"
+                    >
+                      ×
+                    </button>
                   </div>
                   <ul className="direct-messages-list">
                     {getFilteredUsers()
-                      .filter(u => u._id !== user._id && !directConversations.some(c => c._id === u._id))
+                      .filter(u => u._id !== user._id)
                       .map(u => (
                         <li 
                           key={u._id} 
@@ -403,6 +462,9 @@ const MessagingHub = () => {
                             {u.username.charAt(0)}
                           </div>
                           <span className="username">{u.username}</span>
+                          {u.status === 'online' && (
+                            <span className="status-dot online"></span>
+                          )}
                         </li>
                       ))
                     }
@@ -424,7 +486,16 @@ const MessagingHub = () => {
                     ? `# ${typeof activeConversation === 'string' 
                         ? activeConversation 
                         : activeConversation.name}`
-                    : activeConversation.username}
+                    : (activeConversation && activeConversation.username 
+                        ? `${activeConversation.username}`
+                        : 'Direct Message')}
+                </div>
+                <div className="chat-subtitle">
+                  {conversationType === 'direct' && activeConversation?.status && (
+                    <span className={`status-indicator ${activeConversation.status}`}>
+                      {activeConversation.status === 'online' ? '• Online' : ''}
+                    </span>
+                  )}
                 </div>
               </div>
               

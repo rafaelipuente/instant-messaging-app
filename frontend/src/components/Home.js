@@ -9,7 +9,7 @@ const Home = () => {
   return (
     <div className="home-container">
       <div className="home-content">
-        <h1>Welcome to Simplified Chat App</h1>
+        <h1>Welcome to Chat App</h1>
         <p>Connect with friends instantly through our streamlined interface</p>
         
         <div className="home-buttons">

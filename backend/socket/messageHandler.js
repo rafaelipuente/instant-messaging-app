@@ -247,12 +247,15 @@ const handleMessageDeletion = async (io, socket, data) => {
 
 const loadInitialMessages = async (socket, data) => {
   try {
-    const { channel, type, limit = 50 } = data;
+    const { id, channel, type, limit = 50 } = data;
     
     console.log(`[LOAD] Loading initial messages: ${JSON.stringify(data)}`);
     
-    if (!channel) {
-      console.error('[LOAD] Missing channel in loadInitialMessages');
+    // Use either id or channel parameter (for backward compatibility)
+    let conversationId = id || channel;
+    
+    if (!conversationId) {
+      console.error('[LOAD] Missing conversationId in loadInitialMessages');
       socket.emit('error', { message: 'Channel or conversation ID is required' });
       return;
     }
@@ -260,7 +263,7 @@ const loadInitialMessages = async (socket, data) => {
     // Handle standard public channels by name (like 'general', 'tech-talk', etc.)
     if (type === 'channel') {
       // Standard channel - use lowercase name
-      const channelName = channel.toLowerCase();
+      const channelName = conversationId.toLowerCase();
       console.log(`[LOAD] Loading messages for channel: ${channelName}`);
       
       // Get channel messages
@@ -278,8 +281,9 @@ const loadInitialMessages = async (socket, data) => {
       // Transform and send messages
       const transformedMessages = messages.map(transformMessage);
       socket.emit('initialMessages', {
-        channel,
-        messages: transformedMessages
+        channel: conversationId,
+        messages: transformedMessages,
+        type: 'channel'
       });
       
       return transformedMessages;
@@ -287,54 +291,55 @@ const loadInitialMessages = async (socket, data) => {
       // It's a direct message conversation
       try {
         // Validate if the ID is a valid ObjectId (for DB lookup)
-        let conversationId;
         try {
-          conversationId = new mongoose.Types.ObjectId(channel);
-        } catch (err) {
-          console.error(`[LOAD] Invalid ObjectId format for direct message: ${channel}`);
-          socket.emit('error', { message: 'Invalid conversation ID format' });
-          return;
-        }
-        
-        const conversation = await Conversation.findById(conversationId);
-        
-        if (!conversation) {
-          console.error(`[LOAD] Conversation not found: ${channel}`);
-          socket.emit('error', { message: 'Conversation not found' });
-          return;
-        }
-        
-        if (conversation.type === 'direct') {
-          // Get the participants
-          const participants = conversation.participants;
-          if (!participants || participants.length !== 2) {
-            throw new Error('Invalid direct conversation participants');
+          // Store original value for response
+          const originalId = conversationId;
+          conversationId = new mongoose.Types.ObjectId(conversationId);
+          
+          const conversation = await Conversation.findById(conversationId);
+          
+          if (!conversation) {
+            console.error(`[LOAD] Conversation not found: ${conversationId}`);
+            socket.emit('error', { message: 'Conversation not found' });
+            return;
           }
           
-          // Load direct messages
-          const messages = await Message.getDirectMessages(
-            participants[0],
-            participants[1],
-            Number(limit)
-          );
-          
-          console.log(`[LOAD] Found ${messages.length} direct messages`);
-          
-          // Transform and send messages
-          const transformedMessages = messages.map(transformMessage);
-          socket.emit('initialMessages', {
-            channel,
-            messages: transformedMessages
-          });
-          
-          return transformedMessages;
-        } else {
-          console.error(`[LOAD] Found conversation but it's not a direct type: ${conversation.type}`);
-          socket.emit('error', { message: 'Invalid conversation type' });
-          return;
+          if (conversation.type === 'direct') {
+            // Get the participants
+            const participants = conversation.participants;
+            if (!participants || participants.length !== 2) {
+              throw new Error('Invalid direct conversation participants');
+            }
+            
+            // Load direct messages
+            const messages = await Message.getDirectMessages(
+              participants[0],
+              participants[1],
+              Number(limit)
+            );
+            
+            console.log(`[LOAD] Found ${messages.length} direct messages`);
+            
+            // Transform and send messages
+            const transformedMessages = messages.map(transformMessage);
+            socket.emit('initialMessages', {
+              channel: originalId,
+              messages: transformedMessages,
+              type: 'direct'
+            });
+            
+            return transformedMessages;
+          } else {
+            console.error(`[LOAD] Found conversation but it's not a direct type: ${conversation.type}`);
+            socket.emit('error', { message: 'Invalid conversation type' });
+            return;
+          }
+        } catch (error) {
+          console.error('[LOAD] Error processing conversation ID:', error);
+          socket.emit('error', { message: 'Error loading messages' });
         }
       } catch (error) {
-        console.error('[LOAD] Error processing conversation ID:', error);
+        console.error('[LOAD] Error in loadInitialMessages:', error);
         socket.emit('error', { message: 'Error loading messages' });
       }
     } else {

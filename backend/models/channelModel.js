@@ -105,4 +105,36 @@ conversationSchema.statics.findOrCreateDefaultChannels = async function(creatorI
   return defaultChannels;
 };
 
+// Check if the channel/conversation already exists
+conversationSchema.statics.channelExists = async function(name) {
+  if (!name) return false;
+  
+  const channel = await this.findOne({
+    name: name.toLowerCase(),
+    type: 'channel'
+  });
+  
+  return !!channel;
+};
+
+// Create a standard public channel
+conversationSchema.statics.createStandardChannel = async function(name) {
+  if (!name) throw new Error('Channel name is required');
+  
+  const channelName = name.toLowerCase();
+  
+  // Check if channel already exists
+  const exists = await this.channelExists(channelName);
+  if (exists) {
+    return await this.findOne({ name: channelName, type: 'channel' });
+  }
+  
+  // Create a new channel
+  return await this.create({
+    name: channelName,
+    type: 'channel',
+    isPrivate: false
+  });
+};
+
 module.exports = mongoose.model('Conversation', conversationSchema);

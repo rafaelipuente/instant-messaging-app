@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useSocket } from './SocketContext';
 import { useAuth } from './AuthContext';
-import { API_BASE_URL } from '../config';
 import toast from 'react-hot-toast';
 
 // Create the context
@@ -25,7 +24,7 @@ export const MessageProvider = ({ children }) => {
   const [unreadMessages, setUnreadMessages] = useState({});
   const [typing, setTyping] = useState(null);
 
-  // Function to load messages for a channel or direct conversation
+  // Function to load messages for a conversation
   const loadMessages = useCallback((conversation, type) => {
     if (!connected || !conversation) {
       console.error('Cannot load messages: not connected or no conversation selected');
@@ -45,23 +44,41 @@ export const MessageProvider = ({ children }) => {
       setConversationType(type);
       
       // Standardized approach for both channel and direct messages
+      let conversationId;
+      
       if (type === 'channel') {
-        // Handle channel messages
-        const channelId = conversation.id || conversation._id || conversation.name;
-        console.log(`Emitting loadInitialMessages for channel: ${channelId}`);
+        // Handle channel messages - use name or id
+        conversationId = conversation.id || conversation._id || conversation.name;
+        
+        if (!conversationId) {
+          toast.error('Invalid channel selected');
+          setLoading(false);
+          return false;
+        }
+        
+        console.log(`Emitting loadInitialMessages for channel: ${conversationId}`);
         
         emitEvent('loadInitialMessages', {
           type: 'channel',
-          id: channelId
+          channel: conversationId,
+          id: conversationId
         });
       } else if (type === 'direct') {
-        // Handle direct messages
-        const userId = conversation._id;
-        console.log(`Emitting loadInitialMessages for direct conversation with: ${userId}`);
+        // Handle direct messages - use id
+        conversationId = conversation._id;
+        
+        if (!conversationId) {
+          toast.error('Invalid conversation selected');
+          setLoading(false);
+          return false;
+        }
+        
+        console.log(`Emitting loadInitialMessages for direct conversation with: ${conversationId}`);
         
         emitEvent('loadInitialMessages', {
           type: 'direct',
-          id: userId
+          channel: conversationId,
+          id: conversationId
         });
         
         // We'll handle marking as read separately to avoid circular dependencies
@@ -184,7 +201,7 @@ export const MessageProvider = ({ children }) => {
   }, [connected, emitEvent]);
 
   // Handler for receiving messages from either channels or direct messages
-  const handleMessageReceived = (data) => {
+  const handleMessageReceived = useCallback((data) => {
     console.log('Received message:', data);
     if (!data || !data.message) {
       console.error('Received invalid message format:', data);
@@ -232,54 +249,61 @@ export const MessageProvider = ({ children }) => {
         [newMessage.sender._id]: (prev[newMessage.sender._id] || 0) + 1
       }));
     }
-  };
+  }, [activeConversation, user]);
+
+  // Handler for receiving previous messages
+  const handlePreviousMessages = useCallback((receivedMessages) => {
+    setMessages(receivedMessages);
+    setLoading(false);
+  }, []);
+
+  // Handler for initial messages
+  const handleInitialMessages = useCallback((data) => {
+    console.log('Received initial messages:', data);
+    if (data && data.messages && Array.isArray(data.messages)) {
+      setMessages(data.messages);
+      setLoading(false);
+      
+      // Update active conversation if needed
+      if (data.type && data.type === conversationType) {
+        // This is a confirmation that we're in the right conversation
+        // If needed, you can update UI elements here
+        console.log('Received messages for the active conversation type:', data.type);
+      }
+    } else {
+      console.error('Received malformed initial messages:', data);
+      setLoading(false);
+    }
+  }, [conversationType]);
+
+  // Handler for message deletion
+  const handleMessageDeleted = useCallback(({ messageId }) => {
+    setMessages(prev => 
+      prev.map(msg => 
+        msg._id === messageId 
+          ? { ...msg, isDeleted: true, content: 'This message was deleted', deleting: false } 
+          : msg
+      )
+    );
+  }, []);
+
+  // Handler for typing indicators
+  const handleTypingStatus = useCallback(({ channel, username, isTyping }) => {
+    // Only show typing indicator if it's in the current conversation
+    if ((conversationType === 'channel' && 
+         activeConversation && 
+         channel === (activeConversation.id || activeConversation._id)) ||
+        (conversationType === 'direct' && 
+         activeConversation && 
+         (channel === `${user._id}-${activeConversation._id}` || 
+          channel === `${activeConversation._id}-${user._id}`))) {
+      setTyping(isTyping ? username : null);
+    }
+  }, [activeConversation, conversationType, user]);
 
   // Set up event listeners
   useEffect(() => {
     if (!connected) return;
-    
-    // Handler for receiving previous messages
-    const handlePreviousMessages = (receivedMessages) => {
-      setMessages(receivedMessages);
-      setLoading(false);
-    };
-    
-    // Handler for initial messages
-    const handleInitialMessages = (data) => {
-      console.log('Received initial messages:', data);
-      if (data && data.messages && Array.isArray(data.messages)) {
-        setMessages(data.messages);
-      } else {
-        console.error('Received invalid messages format:', data);
-        setMessages([]);
-      }
-      setLoading(false);
-    };
-    
-    // Handler for message deletion
-    const handleMessageDeleted = ({ messageId }) => {
-      setMessages(prev => 
-        prev.map(msg => 
-          msg._id === messageId 
-            ? { ...msg, isDeleted: true, content: 'This message was deleted', deleting: false } 
-            : msg
-        )
-      );
-    };
-    
-    // Handler for typing indicators
-    const handleTypingStatus = ({ channel, username, isTyping }) => {
-      // Only show typing indicator if it's in the current conversation
-      if ((conversationType === 'channel' && 
-           activeConversation && 
-           channel === (activeConversation.id || activeConversation._id)) ||
-          (conversationType === 'direct' && 
-           activeConversation && 
-           (channel === `${user._id}-${activeConversation._id}` || 
-            channel === `${activeConversation._id}-${user._id}`))) {
-        setTyping(isTyping ? username : null);
-      }
-    };
     
     // Register event listeners
     const cleanupFunctions = [
@@ -295,7 +319,15 @@ export const MessageProvider = ({ children }) => {
     return () => {
       cleanupFunctions.forEach(cleanup => cleanup());
     };
-  }, [connected, onEvent, activeConversation, conversationType, user, handleMessageReceived]);
+  }, [
+    connected, 
+    onEvent, 
+    handlePreviousMessages,
+    handleInitialMessages,
+    handleMessageReceived,
+    handleMessageDeleted,
+    handleTypingStatus
+  ]);
 
   // Function to mark conversation as read
   const markAsRead = useCallback((conversationId) => {

@@ -17,7 +17,7 @@ export const useConversations = () => {
 
 export const ConversationProvider = ({ children }) => {
   const { user } = useAuth();
-  const { connected, emitEvent, onEvent } = useSocket();
+  const { connected, onEvent } = useSocket();
   const [channels, setChannels] = useState([]);
   const [directConversations, setDirectConversations] = useState([]);
   const [users, setUsers] = useState([]);
@@ -37,6 +37,7 @@ export const ConversationProvider = ({ children }) => {
     
     try {
       setLoading(true);
+      console.log('Fetching channels...');
       
       const response = await fetch(`${API_BASE_URL}/conversations?type=channel`, {
         headers: {
@@ -49,6 +50,7 @@ export const ConversationProvider = ({ children }) => {
       }
       
       const data = await response.json();
+      console.log('Received channels data:', data);
       
       // Ensure default channels are always present
       const allChannels = [...defaultChannels];
@@ -70,10 +72,12 @@ export const ConversationProvider = ({ children }) => {
         }
       });
       
+      console.log('Setting channels:', allChannels);
       setChannels(allChannels);
     } catch (error) {
       console.error('Error fetching channels:', error);
       // Fall back to default channels
+      console.log('Falling back to default channels:', defaultChannels);
       setChannels(defaultChannels);
     } finally {
       setLoading(false);
@@ -130,6 +134,7 @@ export const ConversationProvider = ({ children }) => {
     if (!user?.token) return;
     
     try {
+      console.log('Fetching users...');
       const response = await fetch(`${API_BASE_URL}/users/list`, {
         headers: {
           'Authorization': `Bearer ${user.token}`
@@ -141,11 +146,16 @@ export const ConversationProvider = ({ children }) => {
       }
       
       const data = await response.json();
-      setUsers(data.filter(u => u._id !== user._id)); // Exclude current user
+      
+      // Filter out current user
+      const filteredUsers = data.filter(u => u._id !== user._id);
+      console.log('Received users data:', filteredUsers);
+      
+      setUsers(filteredUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
     }
-  }, [user?.token]);
+  }, [user]);
 
   // Function to start a direct conversation
   const startDirectConversation = useCallback(async (userId) => {
@@ -160,43 +170,87 @@ export const ConversationProvider = ({ children }) => {
       if (existing) {
         console.log('Using existing conversation:', existing);
         // Move to top of list if needed by removing and adding back
-        setDirectConversations(prevConversations => [
-          existing, 
-          ...prevConversations.filter(c => c._id !== existing._id)
-        ]);
+        setDirectConversations(prevConversations => {
+          const updatedConversations = [
+            existing, 
+            ...prevConversations.filter(c => c._id !== existing._id)
+          ];
+          
+          // Save to localStorage for persistence
+          localStorage.setItem('openDirectConversations', JSON.stringify(updatedConversations));
+          
+          return updatedConversations;
+        });
+        
         return existing;
       }
       
-      // Create new conversation
-      const response = await fetch(`${API_BASE_URL}/direct-messages/${userId}`, {
-        method: 'GET', // This endpoint creates if not exists
+      // Try to find an existing direct message conversation or create one
+      console.log(`Attempting to start conversation with user ID: ${userId}`);
+      
+      // Use the correct API endpoint for messages
+      const response = await fetch(`${API_BASE_URL}/messages/direct/${userId}`, {
+        method: 'POST', // POST to create a new conversation
         headers: {
-          'Authorization': `Bearer ${user.token}`
-        }
+          'Authorization': `Bearer ${user.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          content: 'Hello! I started a new conversation.' // Send an initial message
+        })
       });
       
       if (!response.ok) {
-        throw new Error('Failed to start conversation');
+        console.error(`API error: ${response.status} - ${response.statusText}`);
+        throw new Error(`Failed to start conversation: ${response.status}`);
       }
       
-      const newConversation = await response.json();
-      console.log('Created new conversation:', newConversation);
+      const messageData = await response.json();
+      console.log('Created new conversation via message:', messageData);
+      
+      // Use the recipient information to create a conversation object
+      const otherUser = users.find(u => u._id === userId);
+      if (!otherUser) {
+        console.error('Could not find user details for:', userId);
+        toast.error('Could not find user details');
+        return null;
+      }
+      
+      const newConversation = {
+        _id: userId, // Use the user ID as the conversation ID for direct messages
+        username: otherUser.username,
+        profilePicture: otherUser.profilePicture,
+        status: otherUser.status || 'offline',
+        unreadCount: 0,
+        lastMessage: messageData
+      };
+      
+      console.log('Created new conversation object:', newConversation);
       
       // Add to state at the beginning of the array (most recent)
       setDirectConversations(prevConversations => {
         // Remove if already exists
         const filtered = prevConversations.filter(c => c._id !== newConversation._id);
         // Add to beginning (most recent)
-        return [newConversation, ...filtered];
+        const updated = [newConversation, ...filtered];
+        
+        // Save to localStorage for persistence
+        localStorage.setItem('openDirectConversations', JSON.stringify(updated));
+        
+        // Log the update
+        console.log('Updated direct conversations with new one:', updated);
+        
+        return updated;
       });
       
+      toast.success(`Started conversation with ${otherUser.username}`);
       return newConversation;
     } catch (error) {
       console.error('Error starting conversation:', error);
-      toast.error('Failed to start conversation');
+      toast.error(`Failed to start conversation: ${error.message}`);
       return null;
     }
-  }, [user?.token]);
+  }, [user?.token, directConversations, users]);
 
   // Function to create a new channel
   const createChannel = useCallback(async (channelName) => {
@@ -241,6 +295,40 @@ export const ConversationProvider = ({ children }) => {
     }
   }, [user?.token]);
 
+  // Fetch data when user is logged in and socket is connected
+  useEffect(() => {
+    const loadData = async () => {
+      if (user?.token) {
+        await Promise.all([
+          fetchChannels(),
+          fetchDirectConversations(),
+          fetchUsers()
+        ]);
+        
+        // Load open direct conversations from localStorage
+        try {
+          const savedConversations = localStorage.getItem('openDirectConversations');
+          if (savedConversations) {
+            const parsed = JSON.parse(savedConversations);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              console.log('Loaded saved direct conversations from localStorage:', parsed);
+              setDirectConversations(prev => {
+                // Merge with any new conversations fetched from the server
+                const existingIds = new Set(parsed.map(c => c._id));
+                const newOnes = prev.filter(c => !existingIds.has(c._id));
+                return [...parsed, ...newOnes];
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error loading saved conversations:', error);
+        }
+      }
+    };
+    
+    loadData();
+  }, [user?.token, fetchChannels, fetchDirectConversations, fetchUsers]);
+
   // Set up event listeners for real-time updates
   useEffect(() => {
     if (!connected) return;
@@ -275,13 +363,8 @@ export const ConversationProvider = ({ children }) => {
     // Set up event listeners
     const cleanup = onEvent('newConversation', handleNewConversation);
     
-    // Initial data fetch
-    fetchChannels();
-    fetchDirectConversations();
-    fetchUsers();
-    
     return cleanup;
-  }, [connected, onEvent, fetchChannels, fetchDirectConversations, fetchUsers]);
+  }, [connected, onEvent]);
 
   return (
     <ConversationContext.Provider value={{
