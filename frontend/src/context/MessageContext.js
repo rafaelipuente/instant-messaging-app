@@ -26,8 +26,14 @@ export const MessageProvider = ({ children }) => {
 
   // Function to load messages for a conversation
   const loadMessages = useCallback((conversation, type) => {
-    if (!connected || !conversation) {
-      console.error('Cannot load messages: not connected or no conversation selected');
+    if (!connected) {
+      console.error('Cannot load messages: Socket not connected');
+      toast.error('Cannot load messages: Connection error');
+      return false;
+    }
+
+    if (!conversation) {
+      console.error('Cannot load messages: No conversation selected');
       return false;
     }
     
@@ -48,19 +54,20 @@ export const MessageProvider = ({ children }) => {
       
       if (type === 'channel') {
         // Handle channel messages - use name or id
-        conversationId = conversation.id || conversation._id || conversation.name;
+        conversationId = conversation.name || conversation.id || conversation._id;
         
         if (!conversationId) {
+          console.error('Invalid channel selected:', conversation);
           toast.error('Invalid channel selected');
           setLoading(false);
           return false;
         }
         
-        console.log(`Emitting loadInitialMessages for channel: ${conversationId}`);
-        
         // Ensure we're sending the channel name as a string
         // This is crucial for proper message loading on the server
         const channelName = typeof conversationId === 'string' ? conversationId : String(conversationId);
+        
+        console.log(`Emitting loadInitialMessages for channel [${channelName}]`);
         
         emitEvent('loadInitialMessages', {
           type: 'channel',
@@ -72,12 +79,13 @@ export const MessageProvider = ({ children }) => {
         conversationId = conversation._id;
         
         if (!conversationId) {
+          console.error('Invalid direct conversation selected:', conversation);
           toast.error('Invalid conversation selected');
           setLoading(false);
           return false;
         }
         
-        console.log(`Emitting loadInitialMessages for direct conversation with: ${conversationId}`);
+        console.log(`Emitting loadInitialMessages for direct conversation [${conversationId}]`);
         
         emitEvent('loadInitialMessages', {
           type: 'direct',
@@ -268,8 +276,32 @@ export const MessageProvider = ({ children }) => {
 
   // Handler for initial messages
   const handleInitialMessages = useCallback((data) => {
-    console.log('Received initial messages:', data);
+    console.log('Received initial messages:', {
+      type: data?.type,
+      channel: data?.channel,
+      messageCount: data?.messages?.length || 0
+    });
+    
     if (data && data.messages && Array.isArray(data.messages)) {
+      // Ensure we're still on the same conversation that requested these messages
+      const currentConversationId = 
+        conversationType === 'channel' ? 
+          (activeConversation?.name || activeConversation?.id || activeConversation?._id) : 
+          activeConversation?._id;
+          
+      const isMatchingConversation = 
+        data.channel && 
+        currentConversationId && 
+        String(data.channel).toLowerCase() === String(currentConversationId).toLowerCase();
+      
+      if (!isMatchingConversation) {
+        console.warn('Received messages for a different conversation than currently active', {
+          current: currentConversationId,
+          received: data.channel
+        });
+        // We'll still process the messages if they belong to the correct type
+      }
+      
       // Ensure messages are sorted by timestamp
       const sortedMessages = [...data.messages].sort((a, b) => {
         const timeA = new Date(a.timestamp || a.createdAt);
@@ -280,14 +312,11 @@ export const MessageProvider = ({ children }) => {
       setMessages(sortedMessages);
       setLoading(false);
       
-      // Update active conversation if needed
-      if (data.type && data.type === conversationType) {
-        // This is a confirmation that we're in the right conversation
-        console.log('Received messages for the active conversation type:', data.type);
-      }
+      console.log(`Processed ${sortedMessages.length} messages for ${data.type} ${data.channel}`);
     } else {
       console.error('Received malformed initial messages:', data);
       setLoading(false);
+      toast.error('Error loading messages');
     }
   }, [conversationType]);
 

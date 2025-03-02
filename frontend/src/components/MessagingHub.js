@@ -57,7 +57,22 @@ const MessagingHub = () => {
   // Initialize with default channel
   useEffect(() => {
     if (!activeConversation && channels.length > 0) {
-      const defaultChannel = channels.find(c => c.id === 'general') || channels[0];
+      console.log('Initializing with default channel. Available channels:', 
+        channels.map(c => ({ id: c.id, name: c.name })));
+      
+      // Prefer 'general' channel as default, fall back to first channel
+      const defaultChannel = channels.find(c => 
+        c.id === 'general' || c.name === 'general'
+      ) || channels[0];
+      
+      console.log('Selected default channel:', defaultChannel);
+      
+      // Ensure the channel has the expected properties
+      if (!defaultChannel || (!defaultChannel.id && !defaultChannel.name)) {
+        console.error('Invalid default channel:', defaultChannel);
+        return;
+      }
+      
       setActiveConversation(defaultChannel);
       setConversationType('channel');
       loadMessages(defaultChannel, 'channel');
@@ -82,7 +97,33 @@ const MessagingHub = () => {
   
   // Function to switch to a channel
   const handleChannelSelect = (channel) => {
-    console.log('Selecting channel:', channel);
+    if (!channel) {
+      console.error('Cannot select undefined/null channel');
+      return;
+    }
+    
+    console.log('Selecting channel:', {
+      id: channel.id, 
+      name: channel.name, 
+      type: typeof channel === 'string' ? 'string' : 'object'
+    });
+    
+    // Ensure we have a valid channel object before proceeding
+    if (typeof channel === 'string') {
+      // If a string was passed, find the matching channel object
+      const matchingChannel = channels.find(c => 
+        c.id === channel || c.name === channel
+      );
+      
+      if (matchingChannel) {
+        channel = matchingChannel;
+      } else {
+        console.error(`Could not find channel object for name/id: ${channel}`);
+        // Create a temporary channel object
+        channel = { name: channel };
+      }
+    }
+    
     setActiveConversation(channel);
     setConversationType('channel');
     
@@ -94,6 +135,7 @@ const MessagingHub = () => {
       return;
     }
     
+    console.log(`Loading messages for channel [${channelId}]`);
     loadMessages(channel, 'channel');
     markAsRead(channelId);
     setShowUserList(false);

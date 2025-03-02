@@ -72,7 +72,11 @@ io.on('connection', async (socket) => {
     
     // Join user's personal room and all valid channels at once
     socket.join(userId);
-    VALID_CHANNELS.forEach(channel => socket.join(channel.toLowerCase()));
+    VALID_CHANNELS.forEach(channel => {
+      const channelName = channel.toLowerCase();
+      socket.join(channelName);
+      console.log(`User ${username} joined channel: ${channelName}`);
+    });
     
     // Track connection status
     const isReconnect = connectedUsers.has(userId);

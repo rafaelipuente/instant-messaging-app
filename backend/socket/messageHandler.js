@@ -46,19 +46,33 @@ const broadcastMessage = (io, roomIds, message, type) => {
   // Ensure roomIds is an array
   const rooms = Array.isArray(roomIds) ? roomIds : [roomIds];
   
+  console.log(`[BROADCAST] Broadcasting ${type} message to rooms:`, rooms);
+  
   // Send to all specified rooms
   rooms.forEach(roomId => {
-    if (!roomId) return;
+    if (!roomId) {
+      console.error('[BROADCAST] Cannot broadcast to undefined room');
+      return;
+    }
+    
+    const roomName = roomId.toString();
+    
+    // Log connected clients in this room for debugging
+    const roomClients = io.sockets.adapter.rooms.get(roomName);
+    const clientCount = roomClients ? roomClients.size : 0;
+    console.log(`[BROADCAST] Room ${roomName} has ${clientCount} connected clients`);
     
     // Use the unified messageReceived event
-    io.to(roomId.toString()).emit('messageReceived', {
+    io.to(roomName).emit('messageReceived', {
       type,
       message: transformedMessage
     });
     
     // Also send the specific event type for backward compatibility
     const eventName = type === 'channel' ? 'channelMessage' : 'directMessage';
-    io.to(roomId.toString()).emit(eventName, transformedMessage);
+    io.to(roomName).emit(eventName, transformedMessage);
+    
+    console.log(`[BROADCAST] Sent ${type} message to room ${roomName}`);
   });
   
   return transformedMessage;
@@ -245,11 +259,14 @@ const handleMessageDeletion = async (io, socket, data) => {
   }
 };
 
-const loadInitialMessages = async (socket, data) => {
+const loadInitialMessages = async (io, socket, data) => {
   try {
     const { id, channel, type, limit = 50 } = data;
     
-    console.log(`[LOAD] Loading initial messages: ${JSON.stringify(data)}`);
+    console.log(`[LOAD] Loading initial messages:`, {
+      id, channel, type, limit,
+      user: socket.user.username
+    });
     
     // Use either id or channel parameter (for backward compatibility)
     let conversationId = id || channel;
@@ -258,6 +275,17 @@ const loadInitialMessages = async (socket, data) => {
       console.error('[LOAD] Missing conversationId in loadInitialMessages');
       socket.emit('error', { message: 'Channel or conversation ID is required' });
       return;
+    }
+    
+    // Join the room for this conversation if not already joined
+    if (type === 'channel') {
+      const roomName = conversationId.toString().toLowerCase();
+      const alreadyInRoom = socket.rooms.has(roomName);
+      
+      if (!alreadyInRoom) {
+        console.log(`[LOAD] Joining user ${socket.user.username} to channel room: ${roomName}`);
+        socket.join(roomName);
+      }
     }
     
     // Handle standard public channels by name (like 'general', 'tech-talk', etc.)
@@ -280,6 +308,7 @@ const loadInitialMessages = async (socket, data) => {
       
       // Transform and send messages - important to pass the correct event name
       const transformedMessages = messages.map(transformMessage).reverse(); // Reverse to get chronological order
+      console.log(`[LOAD] Emitting ${transformedMessages.length} channel messages for ${channelName}`);
       socket.emit('initialMessages', {
         channel: channelName,
         messages: transformedMessages,
@@ -322,6 +351,7 @@ const loadInitialMessages = async (socket, data) => {
             
             // Transform and send messages
             const transformedMessages = messages.map(transformMessage);
+            console.log(`[LOAD] Emitting ${transformedMessages.length} direct messages for conversation ${originalId}`);
             socket.emit('initialMessages', {
               channel: originalId,
               messages: transformedMessages,
