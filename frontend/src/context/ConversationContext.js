@@ -23,7 +23,9 @@ export const ConversationProvider = ({ children }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Default channels
+  // Default channels - ensure consistent naming with backend
+  // IMPORTANT: The 'id' should match the channel name in the database (lowercase with hyphens)
+  // while the 'name' is the display name (properly capitalized)
   const defaultChannels = [
     { id: 'general', name: 'General', icon: '🌐', isDefaultChannel: true },
     { id: 'tech-talk', name: 'Tech Talk', icon: '💻', isDefaultChannel: true },
@@ -63,9 +65,23 @@ export const ConversationProvider = ({ children }) => {
           return;
         }
         
-        if (!allChannels.some(c => c.id === channel._id)) {
+        // Check if this is one of our default channels by name
+        const isDefaultChannel = defaultChannels.some(dc => dc.id === channel.name);
+        
+        if (isDefaultChannel) {
+          // This is a default channel - use the predefined ID (channel name) for consistency
+          // Update any fields from the server version
+          const defaultChannel = defaultChannels.find(dc => dc.id === channel.name);
+          if (defaultChannel) {
+            // Update the default channel with server data if available
+            // but keep the consistent ID
+            defaultChannel._id = channel._id;
+            defaultChannel.icon = channel.icon || defaultChannel.icon;
+          }
+        } else if (!allChannels.some(c => c.id === channel._id)) {
+          // This is a custom channel - add it to the list
           allChannels.push({
-            id: channel._id,
+            id: channel._id, 
             name: channel.name,
             icon: channel.icon || '💬',
             isDefaultChannel: channel.isDefaultChannel
@@ -165,10 +181,30 @@ export const ConversationProvider = ({ children }) => {
     if (!user?.token || !userId) return null;
     
     try {
-      // Check if conversation already exists
-      const existing = directConversations.find(c => 
-        c._id === userId || c.userId === userId
+      // First, check if conversation already exists by user ID
+      // We need to check both the _id and userId fields since we may have stored
+      // conversations in different formats
+      const existingByUserId = directConversations.find(c => 
+        c.userId === userId ||
+        (c.otherUser && c.otherUser._id === userId)
       );
+      
+      // Also check if we have a dm_ format conversation that matches this user
+      // This supports the new consistent ID format
+      const existingByDmFormat = directConversations.find(c => {
+        // Check if this is a direct message conversation ID
+        if (c._id && typeof c._id === 'string' && c._id.startsWith('dm_')) {
+          // Extract the user IDs from the dm_ format
+          const parts = c._id.split('_');
+          if (parts.length === 3) {
+            // Check if either user ID matches our target
+            return parts[1] === userId || parts[2] === userId;
+          }
+        }
+        return false;
+      });
+      
+      const existing = existingByUserId || existingByDmFormat;
       
       if (existing) {
         console.log('Using existing conversation:', existing);
@@ -180,7 +216,7 @@ export const ConversationProvider = ({ children }) => {
           ];
           
           // Save to localStorage for persistence
-          localStorage.setItem('openDirectConversations', JSON.stringify(updatedConversations));
+          localStorage.setItem('openChats', JSON.stringify(updatedConversations));
           
           return updatedConversations;
         });
@@ -199,7 +235,9 @@ export const ConversationProvider = ({ children }) => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          content: 'Hello! I started a new conversation.' // Send an initial message
+          // Instead of a default message, we'll just initiate the conversation
+          // without any starter message
+          startConversation: true
         }),
         credentials: 'include'
       });
@@ -210,7 +248,19 @@ export const ConversationProvider = ({ children }) => {
       }
       
       const messageData = await response.json();
-      console.log('Created new conversation via message:', messageData);
+      console.log('Created new conversation:', messageData);
+      
+      // Extract the conversation ID from the response
+      // The backend creates conversation IDs in format: dm_userId1_userId2
+      const conversationId = messageData.conversationId || messageData._id;
+      
+      if (!conversationId) {
+        console.error('No conversation ID in response:', messageData);
+        toast.error('Failed to create conversation');
+        return null;
+      }
+      
+      console.log('Extracted conversation ID:', conversationId);
       
       // Use the recipient information to create a conversation object
       const otherUser = users.find(u => u._id === userId);
@@ -220,26 +270,37 @@ export const ConversationProvider = ({ children }) => {
         return null;
       }
       
+      // Create a conversation object, handling cases where there's no initial message
       const newConversation = {
-        _id: userId, // Use the user ID as the conversation ID for direct messages
+        _id: conversationId, // Use the actual conversation ID from the server
+        userId: userId,       // Store the user ID separately for reference
         username: otherUser.username,
         profilePicture: otherUser.profilePicture,
         status: otherUser.status || 'offline',
         unreadCount: 0,
-        lastMessage: messageData
+        // Only set lastMessage if we received a message in the response
+        lastMessage: messageData._id ? messageData : null, 
+        // Store the receiverId for easier message sending
+        receiverId: userId,
+        // Include empty conversation flag to indicate no messages yet
+        emptyConversation: !messageData._id 
       };
       
       console.log('Created new conversation object:', newConversation);
       
       // Add to state at the beginning of the array (most recent)
       setDirectConversations(prevConversations => {
-        // Remove if already exists
-        const filtered = prevConversations.filter(c => c._id !== newConversation._id);
+        // Remove any existing conversations with this user or ID
+        const filtered = prevConversations.filter(c => 
+          c._id !== newConversation._id && 
+          c.userId !== userId &&
+          (c.otherUser?._id !== userId)
+        );
         // Add to beginning (most recent)
         const updated = [newConversation, ...filtered];
         
         // Save to localStorage for persistence
-        localStorage.setItem('openDirectConversations', JSON.stringify(updated));
+        localStorage.setItem('openChats', JSON.stringify(updated));
         
         // Log the update
         console.log('Updated direct conversations with new one:', updated);
@@ -267,7 +328,7 @@ export const ConversationProvider = ({ children }) => {
       const updatedConversations = prevConversations.filter(c => c._id !== userId);
       
       // Save to localStorage for persistence
-      localStorage.setItem('openDirectConversations', JSON.stringify(updatedConversations));
+      localStorage.setItem('openChats', JSON.stringify(updatedConversations));
       
       return updatedConversations;
     });
@@ -329,7 +390,7 @@ export const ConversationProvider = ({ children }) => {
         
         // Load open direct conversations from localStorage
         try {
-          const savedConversations = localStorage.getItem('openDirectConversations');
+          const savedConversations = localStorage.getItem('openChats');
           if (savedConversations) {
             const parsed = JSON.parse(savedConversations);
             if (Array.isArray(parsed) && parsed.length > 0) {

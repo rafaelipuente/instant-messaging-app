@@ -19,6 +19,7 @@ const {
 
 // Import models
 const { Message } = require('./models/messageModel');
+const Conversation = require('./models/channelModel');
 
 // Import authentication middleware
 const { socketAuth } = require('./middleware/auth');
@@ -43,7 +44,19 @@ process.on('unhandledRejection', (error) => {
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
+  .then(() => {
+    console.log('Connected to MongoDB');
+    
+    // Create default channels if they don't exist
+    return Conversation.findOrCreateDefaultChannels(new mongoose.Types.ObjectId())
+      .then(channels => {
+        console.log(`Default channels initialized: ${channels.map(c => c.name).join(', ')}`);
+      })
+      .catch(err => {
+        console.error('Error creating default channels:', err);
+        // Continue server startup even if channel creation fails
+      });
+  })
   .catch(err => {
     console.error('MongoDB connection error:', err);
     process.exit(1);

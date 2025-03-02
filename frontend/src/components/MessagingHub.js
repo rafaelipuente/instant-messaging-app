@@ -20,7 +20,7 @@ const MessagingHub = () => {
   const [activeToggle, setActiveToggle] = useState('channels');
   const [showUserList, setShowUserList] = useState(false);
   const [showOpenChats, setShowOpenChats] = useState(true);
-  const [displayRecentDMs] = useState(true);
+  // const [displayRecentDMs] = useState(true); // Removed unused variable
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   
@@ -44,7 +44,7 @@ const MessagingHub = () => {
     channels,
     directConversations,
     users,
-    loading: conversationsLoading,
+    // loading: conversationsLoading, // Removed unused variable
     startDirectConversation,
     removeConversation
   } = useConversations();
@@ -111,32 +111,48 @@ const MessagingHub = () => {
     // Ensure we have a valid channel object before proceeding
     if (typeof channel === 'string') {
       // If a string was passed, find the matching channel object
-      const matchingChannel = channels.find(c => 
-        c.id === channel || c.name === channel
-      );
+      // First try to match by ID (which should be the channel name from database)
+      let matchingChannel = channels.find(c => c.id === channel);
+      
+      // If not found, try by display name (case-insensitive)
+      if (!matchingChannel) {
+        matchingChannel = channels.find(c => 
+          c.name.toLowerCase() === channel.toLowerCase()
+        );
+      }
+      
+      // If still not found, check if any channel ID contains this string
+      // This helps with hyphenated names like 'tech-talk'
+      if (!matchingChannel) {
+        matchingChannel = channels.find(c => 
+          c.id && c.id.includes(channel)
+        );
+      }
       
       if (matchingChannel) {
         channel = matchingChannel;
       } else {
         console.error(`Could not find channel object for name/id: ${channel}`);
-        // Create a temporary channel object
-        channel = { name: channel };
+        // Create a temporary channel object - use the string as both ID and name
+        channel = { id: channel, name: channel };
       }
     }
     
+    console.log('Selected channel object:', channel);
     setActiveConversation(channel);
     setConversationType('channel');
     
     // Ensure we're passing the correct channel identifier
-    // This is important for loading messages correctly
-    const channelId = channel.name || channel.id || (typeof channel === 'string' ? channel : null);
+    // For consistent channel handling, prefer to use the ID (which should be
+    // the channel name in the database) over the name (which is for display)
+    const channelId = channel.id || channel.name || (typeof channel === 'string' ? channel : null);
     if (!channelId) {
       console.error('Invalid channel selected, missing identifier:', channel);
       return;
     }
     
     console.log(`Loading messages for channel [${channelId}]`);
-    loadMessages(channel, 'channel');
+    loadMessages(channelId, 'channel');
     markAsRead(channelId);
     setShowUserList(false);
   };
@@ -203,6 +219,7 @@ const MessagingHub = () => {
   };
   
   // Function to handle creating a new channel (disabled as per requirements)
+  // eslint-disable-next-line no-unused-vars
   const handleCreateChannel = async () => {
     // This functionality has been disabled as per requirements
     console.log('Channel creation is disabled');
@@ -558,36 +575,42 @@ const MessagingHub = () => {
                   <div className="loading-messages">Loading messages...</div>
                 ) : (
                   <div className="messages-list">
-                    {messages.map(msg => (
-                      <div 
-                        key={msg._id} 
-                        className={`message ${isCurrentUser(msg.sender?._id) ? 'sent' : 'received'} ${msg.isDeleted ? 'deleted' : ''} ${msg.pending ? 'pending' : ''}`}
-                      >
-                        <div className="message-avatar">
-                          <UserAvatar 
-                            src={getProfilePicture(msg.sender?.profilePicture)} 
-                            username={msg.sender?.username || 'Unknown'}
-                          />
-                        </div>
-                        <div className="message-content">
-                          <div className="message-header">
-                            <span className="message-username">{msg.sender?.username || 'Unknown'}</span>
-                            <span className="message-time">{formatTime(msg.timestamp)}</span>
-                          </div>
-                          <div className="message-text">
-                            {msg.deleting ? 'Deleting...' : msg.content}
-                          </div>
-                          {isCurrentUser(msg.sender?._id) && !msg.isDeleted && !msg.deleting && (
-                            <button 
-                              className="delete-button" 
-                              onClick={() => handleDeleteMessage(msg._id)}
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
+                    {messages.length === 0 && conversationType === 'direct' ? (
+                      <div className="empty-conversation-message">
+                        <p>Start a conversation with {activeConversation?.username || 'this user'}.</p>
                       </div>
-                    ))}
+                    ) : (
+                      messages.map(msg => (
+                        <div 
+                          key={msg._id} 
+                          className={`message ${isCurrentUser(msg.sender?._id) ? 'sent' : 'received'} ${msg.isDeleted ? 'deleted' : ''} ${msg.pending ? 'pending' : ''}`}
+                        >
+                          <div className="message-avatar">
+                            <UserAvatar 
+                              src={getProfilePicture(msg.sender?.profilePicture)} 
+                              username={msg.sender?.username || 'Unknown'}
+                            />
+                          </div>
+                          <div className="message-content">
+                            <div className="message-header">
+                              <span className="message-username">{msg.sender?.username || 'Unknown'}</span>
+                              <span className="message-time">{formatTime(msg.timestamp)}</span>
+                            </div>
+                            <div className="message-text">
+                              {msg.deleting ? 'Deleting...' : msg.content}
+                            </div>
+                            {isCurrentUser(msg.sender?._id) && !msg.isDeleted && !msg.deleting && (
+                              <button 
+                                className="delete-button" 
+                                onClick={() => handleDeleteMessage(msg._id)}
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
                     {typing && (
                       <div className="typing-indicator">
                         {typing} is typing...

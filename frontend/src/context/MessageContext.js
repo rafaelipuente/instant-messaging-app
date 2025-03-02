@@ -53,8 +53,18 @@ export const MessageProvider = ({ children }) => {
       let conversationId;
       
       if (type === 'channel') {
-        // Handle channel messages - use name or id
-        conversationId = conversation.name || conversation.id || conversation._id;
+        // For channels, we need the channel name (lowercase, with hyphens) for backend lookup
+        // First try to get the ID (which should be the channel name in database format)
+        if (typeof conversation === 'string') {
+          // If conversation is just a string, use it directly
+          conversationId = conversation.toLowerCase();
+        } else {
+          // If it's an object, prefer id over name (id should be the database name)
+          conversationId = conversation.id || conversation.name || conversation._id;
+        }
+        
+        // Log for debugging
+        console.log(`Using channel ID: ${conversationId} for messages`);
         
         if (!conversationId) {
           console.error('Invalid channel selected:', conversation);
@@ -121,11 +131,12 @@ export const MessageProvider = ({ children }) => {
     
     try {
       const timestamp = new Date();
-      const tempId = `temp-${timestamp.getTime()}`;
+      // Create a unique tempId without the 'temp-' prefix (will be added in handleMessageReceived)
+      const tempId = `${timestamp.getTime()}-${Math.floor(Math.random() * 10000)}`;
       
       // Create a temporary message to show immediately
       const tempMessage = {
-        _id: tempId,
+        _id: `temp-${tempId}`,
         content: content.trim(),
         sender: {
           _id: user._id,
@@ -143,17 +154,25 @@ export const MessageProvider = ({ children }) => {
       
       // Handle based on conversation type
       if (conversationType === 'direct') {
-        // Add receiver info
+        // Add receiver info - use userId if available (for proper message routing), otherwise use _id
+        const receiverId = activeConversation.userId || activeConversation._id;
+        
         tempMessage.receiver = {
-          _id: activeConversation._id,
+          _id: receiverId,
           username: activeConversation.username
         };
+        
+        // Store the actual conversation ID for lookup when receiving the server response
+        tempMessage.conversationId = activeConversation._id;
+        
+        console.log(`Sending direct message to ${activeConversation.username} with ID ${receiverId}, conversationId: ${activeConversation._id}`);
         
         // Emit direct message event
         emitEvent('directMessage', {
           content: content.trim(),
-          receiverId: activeConversation._id,
-          tempId
+          receiverId: receiverId,
+          tempId,
+          conversationId: activeConversation._id // Pass the conversation ID to help with matching
         });
       } else {
         // For channel messages
@@ -223,20 +242,49 @@ export const MessageProvider = ({ children }) => {
     const newMessage = data.message;
     const messageType = data.type; // 'channel' or 'direct'
     
-    // Don't add duplicate messages
+    // For direct messages, ensure the conversation ID is properly set
+    if (messageType === 'direct') {
+      // If we have a conversationId in the message, use that
+      // Otherwise, try to determine it from sender/receiver
+      if (!newMessage.conversationId) {
+        // Construct the conversation ID in the same format as the backend
+        const senderId = newMessage.sender?._id;
+        const receiverId = newMessage.receiver?._id;
+        
+        if (senderId && receiverId) {
+          const sortedIds = [senderId.toString(), receiverId.toString()].sort();
+          newMessage.conversationId = `dm_${sortedIds[0]}_${sortedIds[1]}`;
+          console.log(`Constructed conversation ID for direct message: ${newMessage.conversationId}`);
+        }
+      }
+    }
+    
+    // Handle message updates
     setMessages(prev => {
-      // Check if message with this ID already exists
-      if (prev.some(msg => msg._id === newMessage._id)) {
+      // Case 1: Check if message with this ID already exists
+      const existingMessageIndex = prev.findIndex(msg => msg._id === newMessage._id);
+      if (existingMessageIndex !== -1) {
+        console.log('Message already exists in state, skipping:', newMessage._id);
         return prev;
       }
       
-      // Replace any temporary message with the server response
-      if (newMessage.tempId && prev.some(msg => msg._id === newMessage.tempId)) {
-        return prev.map(msg => 
-          msg._id === newMessage.tempId ? newMessage : msg
-        );
+      // Case 2: Check if this is a server confirmation of a temporary message
+      // The tempId field is passed with emitted event and returned in the server response
+      const tempMessageIndex = prev.findIndex(msg => 
+        newMessage.tempId && msg._id === `temp-${newMessage.tempId}`
+      );
+      
+      if (tempMessageIndex !== -1) {
+        console.log('Replacing temporary message with server version:', newMessage.tempId);
+        const updatedMessages = [...prev];
+        updatedMessages[tempMessageIndex] = {
+          ...newMessage,
+          pending: false // Clear the pending flag
+        };
+        return updatedMessages;
       }
       
+      // Case 3: This is a completely new message
       // Ensure messages are in chronological order
       const updatedMessages = [...prev, newMessage];
       return updatedMessages.sort((a, b) => {

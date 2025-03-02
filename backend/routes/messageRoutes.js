@@ -123,59 +123,54 @@ router.get('/direct/conversations', auth, async (req, res) => {
  */
 router.post('/direct/:userId', auth, async (req, res) => {
   try {
-    const { content } = req.body;
+    const { content, startConversation } = req.body;
     const senderId = req.user._id;
     const receiverId = req.params.userId;
     
-    if (!content || content.trim() === '') {
+    // Allow creating a conversation without content if startConversation flag is set
+    if ((!content || content.trim() === '') && !startConversation) {
       return res.status(400).json({ error: 'Message content is required' });
     }
 
     // Find or create conversation
-    let conversation = await Conversation.findOne({
-      type: 'direct',
-      participants: { $all: [senderId, receiverId] }
-    });
+    // Use the static method to ensure IDs are consistent
+    const conversation = await Conversation.findOrCreateDirectConversation(senderId, receiverId);
 
-    if (!conversation) {
-      // Create a new conversation
-      conversation = new Conversation({
-        type: 'direct',
-        participants: [senderId, receiverId],
-        name: `direct-${senderId}-${receiverId}`,
-        displayName: 'Direct Message', // Add required displayName
-        createdBy: senderId // Add required createdBy
-      });
-      await conversation.save();
+    // Ensure both users have this conversation in their list
+    // This is now handled by the User model methods
+    const [sender, receiver] = await Promise.all([
+      User.findById(senderId),
+      User.findById(receiverId)
+    ]);
 
-      // Add to both users' conversations
-      await User.updateOne(
-        { _id: senderId },
-        { $addToSet: { conversations: { conversationId: conversation._id } } }
-      );
-      
-      await User.updateOne(
-        { _id: receiverId },
-        { $addToSet: { conversations: { conversationId: conversation._id } } }
-      );
+    if (sender) {
+      await sender.addConversation(conversation._id);
+    }
+    
+    if (receiver) {
+      await receiver.addConversation(conversation._id);
     }
 
-    // Create new message
-    const newMessage = new Message({
-      content,
-      sender: senderId,
-      receiver: receiverId,
-      conversation: conversation._id,
-      messageType: 'direct'
-    });
+    // Only create a message if content is provided
+    let newMessage = null;
+    if (content && content.trim() !== '') {
+      // Create new message
+      newMessage = new Message({
+        content,
+        sender: senderId,
+        receiver: receiverId,
+        conversation: conversation._id,
+        messageType: 'direct'
+      });
 
-    await newMessage.save();
+      await newMessage.save();
+      
+      // Populate sender info
+      await newMessage.populate('sender', 'username profilePicture status');
+    }
     
-    // Populate sender info
-    await newMessage.populate('sender', 'username profilePicture status');
-    
-    // Format for response
-    const messageResponse = {
+    // Format for response - either include message details or just conversation info
+    const messageResponse = newMessage ? {
       _id: newMessage._id,
       content: newMessage.content,
       sender: {
@@ -184,7 +179,15 @@ router.post('/direct/:userId', auth, async (req, res) => {
         profilePicture: newMessage.sender.profilePicture ? 
           `/uploads/${path.basename(newMessage.sender.profilePicture)}` : null
       },
-      createdAt: newMessage.createdAt
+      createdAt: newMessage.createdAt,
+      conversationId: conversation._id,
+      receiverId: receiverId
+    } : {
+      // Just return conversation info if no message was created
+      conversationId: conversation._id,
+      receiverId: receiverId,
+      // Include success flag to indicate the conversation was created
+      success: true
     };
     
     res.status(201).json(messageResponse);

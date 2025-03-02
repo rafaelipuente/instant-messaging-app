@@ -40,13 +40,19 @@ const transformMessage = (message) => {
 };
 
 // Unified function to broadcast messages
-const broadcastMessage = (io, roomIds, message, type) => {
+const broadcastMessage = (io, roomIds, message, type, tempId = null) => {
   const transformedMessage = transformMessage(message);
+  
+  // Add tempId to the message for client-side reconciliation
+  if (tempId) {
+    transformedMessage.tempId = tempId;
+  }
   
   // Ensure roomIds is an array
   const rooms = Array.isArray(roomIds) ? roomIds : [roomIds];
   
   console.log(`[BROADCAST] Broadcasting ${type} message to rooms:`, rooms);
+  console.log(`[BROADCAST] Message has tempId: ${tempId || 'none'}`);
   
   // Send to all specified rooms
   rooms.forEach(roomId => {
@@ -80,7 +86,7 @@ const broadcastMessage = (io, roomIds, message, type) => {
 
 const handleChannelMessage = async (io, socket, data) => {
   try {
-    const { content, channel } = data;
+    const { content, channel, tempId } = data;
     
     console.log(`[CHANNEL] Processing message for channel: ${channel}`, data);
     
@@ -142,8 +148,8 @@ const handleChannelMessage = async (io, socket, data) => {
     conversation.lastActivity = new Date();
     await conversation.save();
 
-    // Broadcast message to everyone in the channel
-    return broadcastMessage(io, channelName, message, 'channel');
+    // Broadcast message to everyone in the channel - pass along the tempId
+    return broadcastMessage(io, channelName, message, 'channel', tempId);
   } catch (error) {
     console.error('[CHANNEL] Error handling channel message:', error);
     console.error('[CHANNEL] Error details:', error.stack);
@@ -154,10 +160,10 @@ const handleChannelMessage = async (io, socket, data) => {
 
 const handleDirectMessage = async (io, socket, data) => {
   try {
-    const { content, receiverId } = data;
+    const { content, receiverId, tempId, conversationId } = data;
     const senderId = socket.user._id;
 
-    console.log(`[DIRECT MESSAGE] Handling direct message from ${socket.user.username} to ${receiverId}`);
+    console.log(`[DIRECT MESSAGE] Handling direct message from ${socket.user.username} to ${receiverId}, conversationId: ${conversationId || 'not provided'}`);
 
     // Find or create the conversation between the users
     const conversation = await Conversation.findOrCreateDirectConversation(senderId, receiverId);
@@ -168,6 +174,9 @@ const handleDirectMessage = async (io, socket, data) => {
       receiver: receiverId,
       content
     });
+    
+    // Add the conversation ID to the message object - this will be serialized and sent to clients
+    message.conversationId = conversation._id;
 
     await message.save();
     console.log(`[DIRECT MESSAGE] Direct message saved with ID: ${message._id}`);
@@ -190,8 +199,13 @@ const handleDirectMessage = async (io, socket, data) => {
     conversation.lastActivity = new Date();
     await conversation.save();
 
-    // Broadcast to both users
-    return broadcastMessage(io, [senderId.toString(), receiverId.toString()], message, 'direct');
+    // Broadcast to both users - pass along the tempId
+    // Convert message to JSON to add additional properties
+    const messageJson = message.toObject();
+    messageJson.conversationId = conversation._id;
+    
+    // Pass the conversation ID with the message
+    return broadcastMessage(io, [senderId.toString(), receiverId.toString()], messageJson, 'direct', tempId);
   } catch (error) {
     console.error('[DIRECT MESSAGE] Error handling direct message:', error);
     console.error('[DIRECT MESSAGE] Error details:', error.stack);

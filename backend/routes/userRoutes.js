@@ -106,6 +106,16 @@ router.post('/register', async (req, res) => {
 
     await user.save();
     
+    // Add user to default channels
+    try {
+      const Conversation = require('../models/channelModel');
+      const defaultChannels = await Conversation.findOrCreateDefaultChannels(user._id);
+      console.log(`User ${username} added to default channels:`, defaultChannels.map(c => c.name).join(', '));
+    } catch (channelError) {
+      console.error('Error adding user to default channels:', channelError);
+      // Continue registration process even if channel addition fails
+    }
+    
     // Generate token
     const token = jwt.sign(
       { _id: user._id, username: user.username },
