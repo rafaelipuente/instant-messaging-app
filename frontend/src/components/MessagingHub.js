@@ -528,9 +528,12 @@ const MessagingHub = () => {
                           className="dm-item"
                           onClick={() => handleStartDirectMessage(u)}
                         >
-                          <div className="user-avatar">
-                            {u.username.charAt(0)}
-                          </div>
+                          <UserAvatar 
+                            profilePicture={getProfilePicture(u.profilePicture)}
+                            username={u.username}
+                            status={u.status}
+                            className="user-list-avatar"
+                          />
                           <span className="username">{u.username}</span>
                           {u.status === 'online' && (
                             <span className="status-dot online"></span>
@@ -587,7 +590,7 @@ const MessagingHub = () => {
                         >
                           <div className="message-avatar">
                             <UserAvatar 
-                              src={getProfilePicture(msg.sender?.profilePicture)} 
+                              profilePicture={getProfilePicture(msg.sender?.profilePicture)} 
                               username={msg.sender?.username || 'Unknown'}
                             />
                           </div>

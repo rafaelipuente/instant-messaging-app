@@ -37,7 +37,7 @@ const UserAvatar = ({ profilePicture, username, status = 'offline', className = 
   }, [profilePicture, onError]);
 
   return (
-    <div className={`avatar-container ${className}`}>
+    <div className={`avatar-container ${className}`} style={{ borderRadius: '50%', overflow: 'hidden' }}>
       {showDefault ? (
         <div 
           className="default-avatar"
@@ -49,24 +49,36 @@ const UserAvatar = ({ profilePicture, username, status = 'offline', className = 
             color: 'white',
             fontWeight: '600',
             fontSize: '16px',
-            width: '100%',
-            height: '100%',
+            width: '40px',
+            height: '40px',
             borderRadius: '50%',
-            textShadow: '1px 1px 2px rgba(0, 0, 0, 0.1)'
+            textShadow: '1px 1px 2px rgba(0, 0, 0, 0.1)',
+            position: 'absolute',
+            top: '0',
+            left: '2px',
+            transform: 'translateX(-1px)'
           }}
         >
           {initials}
         </div>
       ) : (
-        <div 
+        <img 
+          src={profilePicture}
+          alt={username || 'User'}
           className="user-avatar"
           style={{
-            width: '100%',
-            height: '100%',
-            borderRadius: '50%',
-            backgroundImage: `url(${profilePicture})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center'
+            width: '40px',
+            height: '40px',
+            display: 'block',
+            objectFit: 'cover',
+            position: 'absolute',
+            top: '0',
+            left: '2px', /* Shift slightly to the right */
+            transform: 'translateX(-1px)' /* Fine-tune position */
+          }}
+          onError={(e) => {
+            setShowDefault(true);
+            if (onError) onError(profilePicture);
           }}
         />
       )}

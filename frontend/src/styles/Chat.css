@@ -179,6 +179,8 @@
   flex-direction: column;
   gap: 1rem;
   min-height: 0; /* Allow container to shrink */
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background-color: #f7f7f7;
 }
 
 .message {
@@ -367,6 +369,8 @@
   border-radius: 50%;
   margin-right: 12px;
   object-fit: cover;
+  overflow: hidden;
+  display: block;
 }
 
 .user-info {
@@ -568,6 +572,8 @@
   border-radius: 50%;
   margin-right: 12px;
   object-fit: cover;
+  overflow: hidden;
+  display: block;
 }
 
 .user-info {
@@ -593,6 +599,34 @@
 /* Status colors */
 .user-status {
   color: #94a3b8; /* Default/offline color */
+}
+
+/* Avatar container */
+.avatar-container {
+  display: inline-flex;
+  position: relative;
+  overflow: hidden;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  min-width: 40px; /* Prevent shrinking */
+  min-height: 40px; /* Prevent shrinking */
+  align-items: center;
+  justify-content: center;
+  background-color: #3b82f6;
+  box-sizing: border-box;
+}
+
+/* Default avatar styles */
+.default-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: white;
+  font-weight: 600;
+  font-size: 16px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .user-item .user-status:contains("online") {
@@ -645,6 +679,7 @@
 
 .dark-mode .messages-container {
   background-color: var(--bg-primary);
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
 
 .dark-mode .message-input-container {
