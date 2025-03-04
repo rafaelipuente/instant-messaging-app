@@ -190,8 +190,8 @@
 }
 
 .dm-item .user-avatar {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   margin-right: 8px;
   background-color: #3b82f6;
@@ -202,11 +202,26 @@
   color: white;
   text-transform: uppercase;
   overflow: hidden;
+  position: relative;
 }
 
-.dm-item .user-avatar img {
-  width: 100%;
-  height: 100%;
+.dm-item .avatar-container {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  margin-right: 8px;
+  position: relative;
+}
+
+.dm-item .user-avatar img,
+.dm-item .default-avatar {
+  width: 28px !important;
+  height: 28px !important;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translateX(1px);
   object-fit: cover;
   display: block;
 }
@@ -311,9 +326,27 @@
 }
 
 .user-list-avatar {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   margin-right: 10px;
+}
+
+.user-list-section .avatar-container {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  position: relative;
+}
+
+.user-list-section .user-avatar img,
+.user-list-section .default-avatar {
+  width: 28px !important;
+  height: 28px !important;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translateX(1px);
 }
 
 .dm-item .avatar-container {
