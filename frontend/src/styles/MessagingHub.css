@@ -189,6 +189,11 @@
   color: #ffffff;
 }
 
+/* Styling for users who already have conversations in the recent list */
+.dm-item.existing-conversation {
+  border-left: 3px solid #3b82f6;
+}
+
 .dm-item .user-avatar {
   width: 28px;
   height: 28px;

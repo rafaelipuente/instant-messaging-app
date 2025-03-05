@@ -181,10 +181,36 @@ const MessagingHub = () => {
   
   // Function to start a new direct message conversation
   const handleStartDirectMessage = async (user) => {
-    // Check if a conversation already exists with this user
-    const existingConversation = directConversations.find(
-      c => c._id === user._id || c.userId === user._id
-    );
+    // Comprehensive check for existing conversations with this user
+    // This handles different ID formats and also checks username
+    const existingConversation = directConversations.find(c => {
+      // Check direct ID match
+      if (c._id === user._id || c.userId === user._id) {
+        return true;
+      }
+      
+      // Check username match
+      if (c.username === user.username) {
+        return true;
+      }
+      
+      // Check for dm_ format conversation IDs
+      if (c._id && typeof c._id === 'string' && c._id.startsWith('dm_')) {
+        // Extract the user IDs from the dm_ format
+        const parts = c._id.split('_');
+        if (parts.length === 3) {
+          // Check if either user ID matches our target
+          return parts[1] === user._id || parts[2] === user._id;
+        }
+      }
+      
+      // Check other user ID fields
+      if (c.otherUser && c.otherUser._id === user._id) {
+        return true;
+      }
+      
+      return false;
+    });
     
     if (existingConversation) {
       // If conversation exists, open it
@@ -336,9 +362,26 @@ const MessagingHub = () => {
       });
   };
   
-  const getFilteredDirectMessages = () => directConversations.filter(conversation => 
-    conversation.username?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const getFilteredDirectMessages = () => {
+    // First filter by search term
+    const filtered = directConversations.filter(conversation => 
+      conversation.username?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    
+    // Remove duplicates by username
+    const uniqueConversations = [];
+    const seenUsernames = new Set();
+    
+    filtered.forEach(conversation => {
+      // Check if we've already seen this username
+      if (conversation.username && !seenUsernames.has(conversation.username.toLowerCase())) {
+        seenUsernames.add(conversation.username.toLowerCase());
+        uniqueConversations.push(conversation);
+      }
+    });
+    
+    return uniqueConversations;
+  };
   
   const getFilteredUsers = () => users.filter(user => 
     user.username.toLowerCase().includes(searchTerm.toLowerCase())
@@ -450,7 +493,7 @@ const MessagingHub = () => {
                 key={user._id} 
                 className={`dm-item ${conversationType === 'direct' && 
                   activeConversation && activeConversation._id === user._id ? 'active' : ''}`}
-                onClick={() => handleStartDirectMessage(user)}
+                onClick={() => handleDirectMessageSelect(user)}
               >
                 <div className="user-avatar">
                   {user.username.charAt(0)}
@@ -522,12 +565,23 @@ const MessagingHub = () => {
                   <ul className="direct-messages-list">
                     {getFilteredUsers()
                       .filter(u => u._id !== user._id)
-                      .map(u => (
-                        <li 
-                          key={u._id} 
-                          className="dm-item"
-                          onClick={() => handleStartDirectMessage(u)}
-                        >
+                      .map(u => {
+                        // Check if this user already has a conversation in the recent list
+                        // to visually indicate it to the user
+                        const hasExistingConversation = directConversations.some(c => 
+                          c._id === u._id || 
+                          c.userId === u._id || 
+                          c.username === u.username ||
+                          (c._id && typeof c._id === 'string' && c._id.startsWith('dm_') && 
+                            c._id.split('_').slice(1).includes(u._id))
+                        );
+                        
+                        return (
+                          <li 
+                            key={u._id} 
+                            className={`dm-item ${hasExistingConversation ? 'existing-conversation' : ''}`}
+                            onClick={() => handleStartDirectMessage(u)}
+                          >
                           <UserAvatar 
                             profilePicture={getProfilePicture(u.profilePicture)}
                             username={u.username}
@@ -539,7 +593,8 @@ const MessagingHub = () => {
                             <span className="status-dot online"></span>
                           )}
                         </li>
-                      ))
+                        );
+                      })
                     }
                   </ul>
                 </div>
