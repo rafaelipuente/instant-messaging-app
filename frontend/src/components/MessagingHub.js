@@ -7,6 +7,7 @@ import { useConversations } from '../context/ConversationContext';
 import UserAvatar from './UserAvatar';
 import Navbar from './Navbar';
 import { API_BASE_URL } from '../config';
+import toast from 'react-hot-toast';
 import '../styles/Chat.css';
 import '../styles/DirectMessages.css';
 import '../styles/MessagingHub.css';
@@ -27,6 +28,7 @@ const MessagingHub = () => {
   // Get data from contexts
   const {
     messages,
+    setMessages,
     loading: messagesLoading,
     activeConversation,
     conversationType,
@@ -161,22 +163,45 @@ const MessagingHub = () => {
   const handleDirectMessageSelect = (conversation) => {
     console.log('Selecting direct conversation with:', conversation);
     
+    // Make sure we have a properly formatted conversation object with all required fields
+    const formattedConversation = {
+      ...conversation,
+      _id: conversation._id || conversation.userId, // Ensure _id is set
+      userId: conversation.userId || conversation._id, // Ensure userId is set
+      username: conversation.username || 'Unknown User'
+    };
+    
+    // Generate a standard conversation ID that will be the same for both users
+    if (user && user._id && formattedConversation.userId) {
+      // Create a sorted DM conversation ID for consistency
+      const sortedIds = [user._id.toString(), formattedConversation.userId.toString()].sort();
+      const standardConversationId = `dm_${sortedIds[0]}_${sortedIds[1]}`;
+      
+      // Store this standardized ID
+      formattedConversation.standardConversationId = standardConversationId;
+      
+      console.log(`Created standard conversation ID: ${standardConversationId}`);
+    }
+    
     // Set the active conversation and load messages
-    setActiveConversation(conversation);
+    setActiveConversation(formattedConversation);
     setConversationType('direct');
     
     // First load the messages
-    loadMessages(conversation, 'direct');
+    loadMessages(formattedConversation, 'direct');
     
     // Then mark them as read (if loading was successful)
-    if (conversation._id && unreadMessages[conversation._id] > 0) {
+    if (formattedConversation._id && unreadMessages[formattedConversation._id] > 0) {
       // Add a slight delay to ensure messages are loaded first
       setTimeout(() => {
-        markAsRead(conversation._id);
+        markAsRead(formattedConversation._id);
       }, 100);
     }
     
     setShowUserList(false);
+    
+    // Log the active conversation for debugging
+    console.log('Active conversation set to:', formattedConversation);
   };
   
   // Function to start a new direct message conversation
@@ -226,17 +251,24 @@ const MessagingHub = () => {
           const formattedConversation = {
             ...conversation,
             _id: conversation._id || user._id,
-            username: conversation.username || user.username
+            username: conversation.username || user.username,
+            status: user.status,
+            profilePicture: user.profilePicture
           };
           handleDirectMessageSelect(formattedConversation);
           
           // Ensure open chats are visible
           setShowOpenChats(true);
+          
+          // Show success message
+          toast.success(`Started conversation with ${user.username}`);
         } else {
           console.error("Failed to create conversation", user);
+          toast.error("Failed to start conversation");
         }
       } catch (error) {
         console.error("Error starting direct message:", error);
+        toast.error("Failed to start conversation");
       }
     }
     
@@ -328,16 +360,30 @@ const MessagingHub = () => {
   };
   
   // Function to handle removing a conversation from the list
-  const handleRemoveConversation = (e, userId) => {
+  const handleRemoveConversation = async (e, userId) => {
     e.stopPropagation(); // Prevent opening the conversation when clicking the delete button
     
-    if (window.confirm('Remove this conversation from your recent list?')) {
-      // Use the removeConversation function from ConversationContext
-      removeConversation(userId);
-      
-      // If the active conversation is the one being removed, clear it
-      if (conversationType === 'direct' && activeConversation && activeConversation._id === userId) {
-        setActiveConversation(null);
+    if (window.confirm('Remove this conversation from your recent list? All messages will be deleted.')) {
+      try {
+        // Display loading toast
+        const loadingToastId = toast.loading('Removing conversation...');
+        
+        // Use the removeConversation function from ConversationContext
+        // This now handles the API call to delete messages on the backend
+        await removeConversation(userId);
+        
+        // If the active conversation is the one being removed, clear it
+        if (conversationType === 'direct' && activeConversation && activeConversation._id === userId) {
+          setActiveConversation(null);
+          setMessages([]); // Clear displayed messages
+        }
+        
+        // Dismiss loading toast and show success
+        toast.dismiss(loadingToastId);
+        toast.success('Conversation and messages removed successfully');
+      } catch (error) {
+        console.error('Error in handleRemoveConversation:', error);
+        toast.error('Failed to remove conversation completely');
       }
     }
   };
@@ -451,33 +497,71 @@ const MessagingHub = () => {
     );
   };
   
-  // Render direct messages section
+  // Render direct messages section with online users
   const renderDirectMessages = () => {
+    const onlineUsers = users.filter(u => u.status === 'online' && u._id !== user._id);
+    
     return (
       <div className="direct-messages-section">
         <div className="channels-header">
-          <span>Online User List</span>
-          <button 
-            className="create-dm-btn"
-            onClick={() => setShowUserList(!showUserList)}
-            title="Start a new conversation"
-          >
-            +
-          </button>
+          <span>Online Users</span>
         </div>
+        {onlineUsers.length > 0 ? (
+          <ul className="direct-messages-list">
+            {onlineUsers.map(u => {
+              // Check if this user already has a conversation in the recent list
+              // to visually indicate it to the user
+              const hasExistingConversation = directConversations.some(c => 
+                c._id === u._id || 
+                c.userId === u._id || 
+                c.username === u.username ||
+                (c._id && typeof c._id === 'string' && c._id.startsWith('dm_') && 
+                  c._id.split('_').slice(1).includes(u._id))
+              );
+                        
+              return (
+                <li 
+                  key={u._id} 
+                  className={`dm-item ${hasExistingConversation ? 'existing-conversation' : ''}`}
+                  onClick={() => handleStartDirectMessage(u)}
+                >
+                  <UserAvatar 
+                    profilePicture={getProfilePicture(u.profilePicture)}
+                    username={u.username}
+                    status={u.status}
+                    className="user-list-avatar"
+                  />
+                  <span className="username">{u.username}</span>
+                  <span className="status-dot online"></span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="empty-list-message">No users online at the moment</div>
+        )}
       </div>
     );
   };
   
-  // Render recent DMs section
+  // Render recent DMs section (only showing conversations the user has actively started)
   const renderRecentDMs = () => {
     // Only show if there are any recent DMs
     if (directConversations.length === 0) return null;
     
+    // Log to ensure we're rendering with the right data
+    console.log('Rendering recent DMs with:', {
+      directConversations: directConversations.map(c => ({ 
+        _id: c._id, 
+        username: c.username,
+        status: c.status || 'unknown'
+      }))
+    });
+    
     return (
       <div className="recent-dms-section">
         <div className="recent-dms-header">
-          <span>Recent Conversations</span>
+          <span>My Conversations</span>
           <button 
             className="toggle-btn"
             onClick={() => setShowOpenChats(!showOpenChats)}
@@ -488,26 +572,45 @@ const MessagingHub = () => {
         </div>
         {showOpenChats && (
           <ul className="direct-messages-list">
-            {getFilteredDirectMessages().map(user => (
-              <li 
-                key={user._id} 
-                className={`dm-item ${conversationType === 'direct' && 
-                  activeConversation && activeConversation._id === user._id ? 'active' : ''}`}
-                onClick={() => handleDirectMessageSelect(user)}
-              >
-                <div className="user-avatar">
-                  {user.username.charAt(0)}
-                </div>
-                <span className="username">{user.username}</span>
-                <button 
-                  className="remove-conversation-btn"
-                  onClick={(e) => handleRemoveConversation(e, user._id)}
-                  title="Remove from recent conversations"
-                >
-                  ×
-                </button>
-              </li>
-            ))}
+            {getFilteredDirectMessages().length > 0 ? (
+              getFilteredDirectMessages().map(conversation => {
+                // Check if this conversation is active
+                const isActive = conversationType === 'direct' && 
+                                activeConversation && 
+                                (activeConversation._id === conversation._id ||
+                                 activeConversation.userId === conversation._id ||
+                                 activeConversation._id === conversation.userId);
+                
+                // Make sure we have a user status, defaulting to offline if not set
+                const userStatus = conversation.status || 'offline';
+                
+                return (
+                  <li 
+                    key={conversation._id} 
+                    className={`dm-item ${isActive ? 'active' : ''}`}
+                    onClick={() => handleDirectMessageSelect(conversation)}
+                  >
+                    <UserAvatar 
+                      profilePicture={getProfilePicture(conversation.profilePicture)}
+                      username={conversation.username}
+                      status={userStatus}
+                      className="user-list-avatar"
+                    />
+                    <span className="username">{conversation.username}</span>
+                    <span className={`status-indicator ${userStatus}`}></span>
+                    <button 
+                      className="remove-conversation-btn"
+                      onClick={(e) => handleRemoveConversation(e, conversation._id)}
+                      title="Remove from recent conversations"
+                    >
+                      ×
+                    </button>
+                  </li>
+                );
+              })
+            ) : (
+              <div className="empty-list-message">No active conversations yet</div>
+            )}
           </ul>
         )}
       </div>
@@ -548,6 +651,16 @@ const MessagingHub = () => {
             <>
               {renderDirectMessages()}
               {renderRecentDMs()}
+              
+              {/* Button to view all users (not just online ones) */}
+              <div className="view-all-users-button-container">
+                <button 
+                  className="view-all-users-button"
+                  onClick={() => setShowUserList(!showUserList)}
+                >
+                  {showUserList ? 'Hide All Users' : 'View All Users'}
+                </button>
+              </div>
               
               {/* User List for Starting New Conversations */}
               {showUserList && (
@@ -707,11 +820,42 @@ const MessagingHub = () => {
             </>
           ) : (
             <div className="welcome-container">
-              <div className="welcome-icon">💬</div>
-              <h2 className="welcome-title">Welcome to Instant Chat</h2>
-              <p className="welcome-description">
-                Select a channel or direct message to start chatting.
-              </p>
+              <div className="welcome-content">
+                <div className="welcome-icon">💬</div>
+                <h2 className="welcome-title">Welcome to InstantChat</h2>
+                <p className="welcome-description">
+                  Start connecting with your team in real-time
+                </p>
+                <div className="welcome-instructions">
+                  <div className="welcome-step">
+                    <div className="step-number">1</div>
+                    <div className="step-text">Select a channel from the sidebar</div>
+                  </div>
+                  <div className="welcome-step">
+                    <div className="step-number">2</div>
+                    <div className="step-text">Or start a direct message with a team member</div>
+                  </div>
+                  <div className="welcome-step">
+                    <div className="step-number">3</div>
+                    <div className="step-text">Send messages, share ideas, and collaborate</div>
+                  </div>
+                </div>
+                {activeToggle === 'channels' ? (
+                  <button 
+                    className="welcome-action-btn"
+                    onClick={() => setActiveToggle('messages')}
+                  >
+                    View Direct Messages
+                  </button>
+                ) : (
+                  <button 
+                    className="welcome-action-btn"
+                    onClick={() => setShowUserList(!showUserList)}
+                  >
+                    Find People
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

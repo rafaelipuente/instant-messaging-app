@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { SOCKET_URL } from '../config';
@@ -19,6 +19,43 @@ export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState(null);
+
+  // Track custom event listeners
+  const eventListeners = useRef(new Map());
+
+  // Define emitEvent function here before using it in useEffect
+  const emitEventFn = (eventName, data, callback) => {
+    if (!socket || !connected) {
+      console.error(`Cannot emit ${eventName}: Socket not connected`);
+      return false;
+    }
+
+    try {
+      if (callback) {
+        socket.emit(eventName, data, callback);
+      } else {
+        socket.emit(eventName, data);
+      }
+      return true;
+    } catch (err) {
+      console.error(`Error emitting ${eventName}:`, err);
+      return false;
+    }
+  };
+
+  // Handle global socket:emit events from the app
+  useEffect(() => {
+    const handleSocketEmit = (event) => {
+      const { detail } = event;
+      if (detail && detail.event && detail.data) {
+        console.log(`[SocketContext] Emitting event: ${detail.event}`, detail.data);
+        emitEventFn(detail.event, detail.data);
+      }
+    };
+
+    window.addEventListener('socket:emit', handleSocketEmit);
+    return () => window.removeEventListener('socket:emit', handleSocketEmit);
+  }, [socket, connected]); // Re-add when socket or connection status changes
 
   useEffect(() => {
     if (!user?.token) {
@@ -56,6 +93,14 @@ export const SocketProvider = ({ children }) => {
       console.log('Socket disconnected:', reason);
       setConnected(false);
     });
+    
+    // Register custom listeners
+    if (eventListeners.current.size > 0) {
+      console.log('Re-registering event listeners after reconnection');
+      eventListeners.current.forEach((callback, eventName) => {
+        newSocket.on(eventName, callback);
+      });
+    }
 
     // Set the socket state
     setSocket(newSocket);
@@ -70,31 +115,20 @@ export const SocketProvider = ({ children }) => {
   }, [user?.token]);
 
   // Method to emit events with error handling
-  const emitEvent = (eventName, data, callback) => {
-    if (!socket || !connected) {
-      console.error(`Cannot emit ${eventName}: Socket not connected`);
-      return false;
-    }
-
-    try {
-      if (callback) {
-        socket.emit(eventName, data, callback);
-      } else {
-        socket.emit(eventName, data);
-      }
-      return true;
-    } catch (err) {
-      console.error(`Error emitting ${eventName}:`, err);
-      return false;
-    }
-  };
+  const emitEvent = emitEventFn;
 
   // Register an event listener
   const onEvent = (eventName, callback) => {
     if (!socket) return () => {};
     
+    // Store the callback to re-register on reconnection
+    eventListeners.current.set(eventName, callback);
+    
     socket.on(eventName, callback);
-    return () => socket.off(eventName, callback);
+    return () => {
+      socket.off(eventName, callback);
+      eventListeners.current.delete(eventName);
+    };
   };
 
   return (

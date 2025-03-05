@@ -462,24 +462,59 @@ router.delete('/open-chats/:userId', auth, async (req, res) => {
     const currentUserId = req.user._id;
     const userIdToRemove = req.params.userId;
 
-    // Generate chat ID to find messages
-    const chatId = `dm-${[currentUserId.toString(), userIdToRemove].sort().join('-')}`;
+    console.log('Removing chat with user ID:', userIdToRemove);
+    console.log('Current user ID:', currentUserId);
+    
+    // Try both formats - direct and with dm prefix
+    const possibleChatIds = [
+      // Normal id format: dm-id1-id2
+      `dm-${[currentUserId.toString(), userIdToRemove].sort().join('-')}`,
+      // Just try with the user ID directly
+      userIdToRemove
+    ];
+    
+    console.log('Possible chat IDs to delete:', possibleChatIds);
 
-    // Delete all messages in this chat
-    await Message.deleteMany({
-      channel: chatId,
-      messageType: 'direct'
+    // Delete all messages in this chat with any possible ID format
+    const deleteResult = await Message.deleteMany({
+      $or: [
+        // Try direct messageType
+        {
+          channel: { $in: possibleChatIds },
+          messageType: 'direct'
+        },
+        // Also try without messageType specified
+        {
+          channel: { $in: possibleChatIds }
+        },
+        // Also try with sender/receiver format
+        {
+          $or: [
+            { sender: userIdToRemove, receiver: currentUserId },
+            { sender: currentUserId, receiver: userIdToRemove }
+          ]
+        }
+      ]
     });
+    
+    console.log('Delete result:', deleteResult);
 
     // Remove from open chats
     const user = await User.findById(currentUserId);
-    user.openChats = user.openChats.filter(id => !id.equals(userIdToRemove));
-    await user.save();
+    if (user.openChats && Array.isArray(user.openChats)) {
+      user.openChats = user.openChats.filter(id => {
+        return id && id.toString() !== userIdToRemove;
+      });
+      await user.save();
+    }
 
-    res.json({ message: 'Chat removed and messages deleted successfully' });
+    res.json({ 
+      message: 'Chat removed and messages deleted successfully', 
+      deletedCount: deleteResult.deletedCount 
+    });
   } catch (error) {
     console.error('Error removing from open chats:', error);
-    res.status(500).json({ error: 'Failed to remove from open chats' });
+    res.status(500).json({ error: `Failed to remove from open chats: ${error.message}` });
   }
 });
 

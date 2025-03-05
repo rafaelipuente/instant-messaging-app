@@ -318,21 +318,49 @@ export const ConversationProvider = ({ children }) => {
   }, [user?.token, directConversations, users]);
 
   // Function to remove a conversation from recent conversations list
-  const removeConversation = useCallback((userId) => {
-    if (!userId) return;
+  const removeConversation = useCallback(async (userId) => {
+    if (!userId || !user?.token) return;
     
     console.log(`Removing conversation with user ID: ${userId} from recent conversations`);
     
-    setDirectConversations(prevConversations => {
-      // Filter out the conversation to remove
-      const updatedConversations = prevConversations.filter(c => c._id !== userId);
+    try {
+      // Log the API call we're making for debugging
+      const url = `${API_BASE_URL}/users/open-chats/${userId}`;
+      console.log('Making API call to:', url);
       
-      // Save to localStorage for persistence
-      localStorage.setItem('openChats', JSON.stringify(updatedConversations));
+      // Call API to delete messages for this conversation
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
       
-      return updatedConversations;
-    });
-  }, []);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server response:', errorText);
+        throw new Error(`Failed to delete conversation messages: ${response.status} ${response.statusText}`);
+      }
+      
+      // Update state
+      setDirectConversations(prevConversations => {
+        // Filter out the conversation to remove
+        const updatedConversations = prevConversations.filter(c => c._id !== userId);
+        
+        // Save to localStorage for persistence
+        localStorage.setItem('openChats', JSON.stringify(updatedConversations));
+        
+        return updatedConversations;
+      });
+      
+      console.log('Successfully deleted conversation and messages');
+    } catch (error) {
+      console.error('Error removing conversation:', error);
+      toast.error('Failed to completely remove conversation');
+    }
+  }, [user?.token]);
 
   // Function to create a new channel
   const createChannel = useCallback(async (channelName) => {
@@ -443,11 +471,86 @@ export const ConversationProvider = ({ children }) => {
       }
     };
     
-    // Set up event listeners
-    const cleanup = onEvent('newConversation', handleNewConversation);
+    // Handler for receiving the list of online users
+    const handleOnlineUsers = (onlineUserList) => {
+      console.log('Online users received:', onlineUserList);
+      if (!Array.isArray(onlineUserList)) return;
+      
+      setUsers(prev => {
+        // Update status of existing users based on online users list
+        const updatedUsers = prev.map(u => {
+          const isOnline = onlineUserList.some(ou => ou.userId === u._id);
+          return isOnline ? { ...u, status: 'online' } : u;
+        });
+        
+        // Add any new online users not already in our list
+        onlineUserList.forEach(ou => {
+          if (!updatedUsers.some(u => u._id === ou.userId) && ou.userId !== user?._id) {
+            updatedUsers.push({
+              _id: ou.userId,
+              username: ou.username,
+              status: 'online',
+              profilePicture: null
+            });
+          }
+        });
+        
+        return updatedUsers;
+      });
+    };
     
-    return cleanup;
-  }, [connected, onEvent]);
+    // Handler for when a user connects
+    const handleUserConnected = (data) => {
+      console.log('User connected:', data);
+      if (!data || !data.userId) return;
+      
+      setUsers(prev => {
+        // Check if user already exists in our list
+        const userExists = prev.some(u => u._id === data.userId);
+        
+        if (userExists) {
+          // Update existing user's status
+          return prev.map(u => 
+            u._id === data.userId ? { ...u, status: 'online' } : u
+          );
+        } else if (data.username && data.userId !== user?._id) {
+          // Add new user if not already in the list and not the current user
+          return [...prev, {
+            _id: data.userId,
+            username: data.username,
+            status: 'online',
+            profilePicture: data.profilePicture || null
+          }];
+        }
+        return prev;
+      });
+    };
+    
+    // Handler for when a user disconnects
+    const handleUserDisconnected = (data) => {
+      console.log('User disconnected:', data);
+      if (!data || !data.userId) return;
+      
+      setUsers(prev => {
+        return prev.map(u => 
+          u._id === data.userId ? { ...u, status: 'offline' } : u
+        );
+      });
+    };
+    
+    // Set up event listeners
+    const cleanupFunctions = [
+      onEvent('newConversation', handleNewConversation),
+      onEvent('userConnected', handleUserConnected),
+      onEvent('userDisconnected', handleUserDisconnected),
+      onEvent('onlineUsers', handleOnlineUsers)
+    ];
+    
+    // Return cleanup function
+    return () => {
+      cleanupFunctions.forEach(cleanup => cleanup());
+    };
+  }, [connected, onEvent, user?._id]);
 
   return (
     <ConversationContext.Provider value={{

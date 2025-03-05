@@ -1,6 +1,7 @@
 // Centralized Socket.IO management
 const socketIO = require('socket.io');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/userModel');
 const { 
   handleChannelMessage, 
@@ -8,7 +9,8 @@ const {
   handleMessageDeletion, 
   loadInitialMessages,
   handleConnection,
-  handleDisconnect
+  handleDisconnect,
+  VALID_CHANNELS
 } = require('./messageHandler');
 
 // Import auth middleware
@@ -33,9 +35,33 @@ const setupSocketIO = (server) => {
   // Connection handler
   io.on('connection', (socket) => {
     console.log(`User connected: ${socket.user.username} (${socket.user._id})`);
+    const userId = socket.user._id.toString();
+    const username = socket.user.username;
     
     // Setup socket event handlers
     handleConnection(io, socket, connectedUsers);
+    
+    // Join user's personal room and all channels
+    socket.join(userId);
+    VALID_CHANNELS.forEach(channel => {
+      const channelName = channel.toLowerCase();
+      socket.join(channelName);
+      console.log(`User ${username} joined channel: ${channelName}`);
+    });
+    
+    // Track connection status and update user status
+    const isReconnect = connectedUsers.has(userId);
+    connectedUsers.set(userId, { socketId: socket.id, username });
+    console.log(`User ${username} ${isReconnect ? 're' : ''}connected`);
+    
+    if (!isReconnect) {
+      // Update user status to online
+      User.findByIdAndUpdate(userId, { status: 'online' })
+        .then(() => {
+          io.emit('userConnected', { userId, username, status: 'online' });
+        })
+        .catch(err => console.error('Error updating user status:', err));
+    }
     
     // Channel message handler
     socket.on('channelMessage', (data) => {
@@ -49,12 +75,21 @@ const setupSocketIO = (server) => {
     
     // Load initial messages
     socket.on('loadInitialMessages', (data) => {
-      loadInitialMessages(socket, data);
+      loadInitialMessages(io, socket, data);
     });
     
     // Delete message
     socket.on('deleteMessage', (data) => {
       handleMessageDeletion(io, socket, data);
+    });
+    
+    // Typing indicator events
+    socket.on('typing', ({ channel }) => {
+      socket.to(channel).emit('userTyping', { channel, username });
+    });
+    
+    socket.on('stopTyping', ({ channel }) => {
+      socket.to(channel).emit('userStopTyping', { channel });
     });
     
     // Disconnect handler

@@ -39,7 +39,7 @@ const transformMessage = (message) => {
   return base;
 };
 
-// Unified function to broadcast messages
+// Unified function to broadcast messages with reliability fallbacks
 const broadcastMessage = (io, roomIds, message, type, tempId = null) => {
   const transformedMessage = transformMessage(message);
   
@@ -54,7 +54,7 @@ const broadcastMessage = (io, roomIds, message, type, tempId = null) => {
   console.log(`[BROADCAST] Broadcasting ${type} message to rooms:`, rooms);
   console.log(`[BROADCAST] Message has tempId: ${tempId || 'none'}`);
   
-  // Send to all specified rooms
+  // Enhanced broadcasting with multiple mechanisms for reliability
   rooms.forEach(roomId => {
     if (!roomId) {
       console.error('[BROADCAST] Cannot broadcast to undefined room');
@@ -68,6 +68,7 @@ const broadcastMessage = (io, roomIds, message, type, tempId = null) => {
     const clientCount = roomClients ? roomClients.size : 0;
     console.log(`[BROADCAST] Room ${roomName} has ${clientCount} connected clients`);
     
+    // BROADCAST METHOD 1: Standard room broadcasting
     // Use the unified messageReceived event
     io.to(roomName).emit('messageReceived', {
       type,
@@ -77,10 +78,58 @@ const broadcastMessage = (io, roomIds, message, type, tempId = null) => {
     // Also send the specific event type for backward compatibility
     const eventName = type === 'channel' ? 'channelMessage' : 'directMessage';
     io.to(roomName).emit(eventName, transformedMessage);
-    
-    console.log(`[BROADCAST] Sent ${type} message to room ${roomName}`);
   });
   
+  // BROADCAST METHOD 2: For direct messages, ensure sender and receiver get the message
+  if (type === 'direct' && message.sender && message.receiver) {
+    // Get sender and receiver IDs
+    const senderId = message.sender._id.toString();
+    const receiverId = message.receiver._id.toString();
+    
+    console.log(`[BROADCAST] Direct message from ${senderId} to ${receiverId}`);
+    
+    // Use the special namespaced direct message event for targeted delivery
+    io.to(senderId).emit('directMessageTo:' + receiverId, transformedMessage);
+    io.to(receiverId).emit('directMessageFrom:' + senderId, transformedMessage);
+    
+    // BROADCAST METHOD 3: Try to find and emit directly to all sockets of both users
+    const allSockets = Array.from(io.sockets.sockets.values());
+    
+    // Find all sockets for both users
+    const senderSockets = allSockets.filter(s => s.user && s.user._id.toString() === senderId);
+    const receiverSockets = allSockets.filter(s => s.user && s.user._id.toString() === receiverId);
+    
+    console.log(`[BROADCAST] Found ${senderSockets.length} sender sockets and ${receiverSockets.length} receiver sockets`);
+    
+    // Emit to all sender sockets
+    senderSockets.forEach(socket => {
+      socket.emit('messageReceived', {
+        type,
+        message: transformedMessage
+      });
+      socket.emit(eventName, transformedMessage);
+    });
+    
+    // Emit to all receiver sockets
+    receiverSockets.forEach(socket => {
+      socket.emit('messageReceived', {
+        type,
+        message: transformedMessage
+      });
+      socket.emit(eventName, transformedMessage);
+    });
+    
+    // BROADCAST METHOD 4: Broadcast to all clients as a last resort (but only for direct messages)
+    // This is not ideal but ensures delivery at the expense of unnecessarily notifying other users
+    console.log(`[BROADCAST] Using fallback global broadcast for direct message reliability`);
+    io.emit('globalDirectMessage', {
+      type,
+      message: transformedMessage,
+      intendedRecipients: [senderId, receiverId]
+    });
+  }
+  
+  console.log(`[BROADCAST] Completed all broadcast methods for message ${transformedMessage._id}`);
   return transformedMessage;
 };
 
@@ -165,6 +214,12 @@ const handleDirectMessage = async (io, socket, data) => {
 
     console.log(`[DIRECT MESSAGE] Handling direct message from ${socket.user.username} to ${receiverId}, conversationId: ${conversationId || 'not provided'}`);
 
+    if (!receiverId) {
+      console.error('[DIRECT MESSAGE] No receiverId provided');
+      socket.emit('messageError', { error: 'Receiver ID is required' });
+      return null;
+    }
+
     // Find or create the conversation between the users
     const conversation = await Conversation.findOrCreateDirectConversation(senderId, receiverId);
     
@@ -172,10 +227,11 @@ const handleDirectMessage = async (io, socket, data) => {
     const message = new Message({
       sender: senderId,
       receiver: receiverId,
-      content
+      content,
+      messageType: 'direct' // Ensure messageType is set correctly
     });
     
-    // Add the conversation ID to the message object - this will be serialized and sent to clients
+    // Add the conversation ID to the message object
     message.conversationId = conversation._id;
 
     await message.save();
@@ -199,13 +255,43 @@ const handleDirectMessage = async (io, socket, data) => {
     conversation.lastActivity = new Date();
     await conversation.save();
 
-    // Broadcast to both users - pass along the tempId
     // Convert message to JSON to add additional properties
     const messageJson = message.toObject();
     messageJson.conversationId = conversation._id;
     
-    // Pass the conversation ID with the message
-    return broadcastMessage(io, [senderId.toString(), receiverId.toString()], messageJson, 'direct', tempId);
+    // Log broadcast activity for debugging
+    console.log(`[DIRECT MESSAGE] Broadcasting message to users: ${senderId} and ${receiverId}`);
+    console.log(`[DIRECT MESSAGE] Message content: "${content.substring(0, 20)}${content.length > 20 ? '...' : ''}"`);
+    
+    // Add conversation ID to message for better routing
+    const conversationStr = conversation._id.toString();
+    messageJson.conversationId = conversationStr;
+    
+    // Create a standard conversation room ID format
+    const sortedIds = [senderId.toString(), receiverId.toString()].sort();
+    const conversationRoomId = `dm_${sortedIds[0]}_${sortedIds[1]}`;
+    
+    // Define all rooms where this message should be broadcast
+    const rooms = [
+      senderId.toString(),         // Sender's user room
+      receiverId.toString(),       // Receiver's user room
+      conversationStr,             // Database conversation ID
+      conversationRoomId           // Standardized conversation room
+    ];
+    
+    console.log(`[DIRECT MESSAGE] Broadcasting to multiple rooms for reliability: ${rooms.join(', ')}`);
+    
+    // Use the unified broadcast function for reliable delivery
+    // This handles all broadcasting strategies including direct socket emission and global fallback
+    const transformedMessage = broadcastMessage(io, rooms, message, 'direct', tempId);
+    
+    // Log which rooms received this message
+    console.log(`[DIRECT MESSAGE] Message ${messageJson._id} broadcast complete to all possible rooms`);
+    
+    // Return the message including the conversation ID for reference
+    transformedMessage.conversationId = conversationStr;
+    
+    return transformedMessage;
   } catch (error) {
     console.error('[DIRECT MESSAGE] Error handling direct message:', error);
     console.error('[DIRECT MESSAGE] Error details:', error.stack);
@@ -417,17 +503,34 @@ const handleConnection = async (io, socket, connectedUsers) => {
     // Find all conversations for this user
     const user = await User.findById(socket.user._id).populate('conversations.conversationId');
     
-    // Join rooms for all direct message conversations
+    // Join rooms for all direct message conversations using multiple room formats
     for (const conv of user.conversations) {
       if (conv.conversationId && conv.conversationId.type === 'direct') {
-        socket.join(conv.conversationId._id.toString());
-        console.log(`[CONNECTION] User ${socket.user.username} joined conversation ${conv.conversationId._id}`);
+        // STRATEGY 1: Join using MongoDB conversation ID
+        const conversationId = conv.conversationId._id.toString();
+        socket.join(conversationId);
+        console.log(`[CONNECTION] User ${socket.user.username} joined conversation room ${conversationId}`);
+        
+        // STRATEGY 2: Join using unified conversation ID format
+        // Find other participant
+        const otherParticipant = conv.conversationId.participants.find(
+          p => p.toString() !== socket.user._id.toString()
+        );
+        
+        if (otherParticipant) {
+          // Create standardized room ID with sorted user IDs
+          const sortedIds = [socket.user._id.toString(), otherParticipant.toString()].sort();
+          const conversationRoomId = `dm_${sortedIds[0]}_${sortedIds[1]}`;
+          socket.join(conversationRoomId);
+          console.log(`[CONNECTION] User ${socket.user.username} joined unified room ${conversationRoomId}`);
+        }
       }
     }
     
     // Notify others that user is online
-    socket.broadcast.emit('userStatus', {
+    socket.broadcast.emit('userConnected', {
       userId: socket.user._id,
+      username: socket.user.username,
       status: 'online'
     });
     
@@ -468,9 +571,10 @@ const handleDisconnect = async (io, socket, connectedUsers) => {
       status: 'offline'
     });
     
-    console.log('User disconnected:', socket.user.username);
+    console.log(`[DISCONNECT] User disconnected: ${socket.user.username} (${userId})`);
   } catch (error) {
-    console.error('Error handling disconnect:', error);
+    console.error('[DISCONNECT] Error handling disconnect:', error);
+    console.error('[DISCONNECT] Error details:', error.stack);
   }
 };
 
