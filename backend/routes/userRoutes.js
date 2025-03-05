@@ -275,6 +275,31 @@ router.get('/list', auth, async (req, res) => {
   }
 });
 
+// Get a specific user by ID
+router.get('/:userId', auth, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    console.log(`Fetching user with ID: ${userId}`);
+    
+    // Validate the userId format
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID format' });
+    }
+    
+    const user = await User.findById(userId).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log(`Found user: ${user.username}`);
+    res.json(user);
+  } catch (error) {
+    console.error('Error fetching user by ID:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Update user profile
 router.put('/profile', auth, upload.single('profilePicture'), async (req, res) => {
   try {

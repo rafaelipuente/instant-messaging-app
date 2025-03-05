@@ -1,0 +1,54 @@
+.username-with-preview {
+  position: relative;
+  display: inline-block;
+}
+
+.username-hover {
+  cursor: pointer;
+  position: relative;
+  color: inherit;
+  font-weight: 500;
+}
+
+/* Special styling only for usernames that have preview functionality */
+.username-hover.preview-enabled {
+  color: #007bff;
+  cursor: pointer;
+  position: relative;
+}
+
+.username-hover.preview-enabled:hover {
+  text-decoration: underline;
+}
+
+/* Add subtle indicator that hovering will show more info */
+.username-hover.preview-enabled::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background-color: #007bff;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.username-hover.preview-enabled:hover::after {
+  opacity: 1;
+}
+
+/* Little info icon for preview-enabled usernames */
+.username-hover.preview-enabled::before {
+  content: 'ℹ️';
+  font-size: 10px;
+  margin-right: 3px;
+  opacity: 0.5;
+  position: relative;
+  top: -3px;
+  transition: opacity 0.2s;
+}
+
+.username-hover.preview-enabled:hover::before {
+  opacity: 1;
+}

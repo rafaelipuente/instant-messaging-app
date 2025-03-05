@@ -5,6 +5,7 @@ import { useSocket } from '../context/SocketContext';
 import { useMessages } from '../context/MessageContext';
 import { useConversations } from '../context/ConversationContext';
 import UserAvatar from './UserAvatar';
+import UserNameWithPreview from './UserNameWithPreview';
 import Navbar from './Navbar';
 import { API_BASE_URL } from '../config';
 import toast from 'react-hot-toast';
@@ -531,7 +532,13 @@ const MessagingHub = () => {
                     status={u.status}
                     className="user-list-avatar"
                   />
-                  <span className="username">{u.username}</span>
+                  <UserNameWithPreview
+                    userId={u._id}
+                    username={u.username}
+                    profilePicture={u.profilePicture}
+                    className="username"
+                    previewContext={UserNameWithPreview.PREVIEW_CONTEXT.NONE}
+                  />
                   <span className="status-dot online"></span>
                 </li>
               );
@@ -596,7 +603,13 @@ const MessagingHub = () => {
                       status={userStatus}
                       className="user-list-avatar"
                     />
-                    <span className="username">{conversation.username}</span>
+                    <UserNameWithPreview
+                      userId={conversation._id}
+                      username={conversation.username}
+                      profilePicture={conversation.profilePicture}
+                      className="username"
+                      previewContext={UserNameWithPreview.PREVIEW_CONTEXT.NONE}
+                    />
                     <span className={`status-indicator ${userStatus}`}></span>
                     <button 
                       className="remove-conversation-btn"
@@ -701,7 +714,12 @@ const MessagingHub = () => {
                             status={u.status}
                             className="user-list-avatar"
                           />
-                          <span className="username">{u.username}</span>
+                          <UserNameWithPreview
+                     userId={u._id}
+                     username={u.username}
+                     profilePicture={u.profilePicture}
+                     className="username"
+                   />
                           {u.status === 'online' && (
                             <span className="status-dot online"></span>
                           )}
@@ -764,7 +782,15 @@ const MessagingHub = () => {
                           </div>
                           <div className="message-content">
                             <div className="message-header">
-                              <span className="message-username">{msg.sender?.username || 'Unknown'}</span>
+                              {/* Log sender ID for debugging */}
+                              {console.log('Message sender ID:', msg.sender?._id)}
+                              <UserNameWithPreview
+                                userId={msg.sender?._id}
+                                username={msg.sender?.username || 'Unknown'}
+                                profilePicture={msg.sender?.profilePicture}
+                                className="message-username"
+                                previewContext={UserNameWithPreview.PREVIEW_CONTEXT.MESSAGE}
+                              />
                               <span className="message-time">{formatTime(msg.timestamp)}</span>
                             </div>
                             <div className="message-text">
