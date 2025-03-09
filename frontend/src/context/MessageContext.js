@@ -130,12 +130,15 @@ export const MessageProvider = ({ children }) => {
     
     try {
       const timestamp = new Date();
-      // Create a unique tempId without the 'temp-' prefix (will be added in handleMessageReceived)
-      const tempId = `${timestamp.getTime()}-${Math.floor(Math.random() * 10000)}`;
+      // Create a unique tempId that includes the user's ID to ensure uniqueness across different users
+      const tempId = `${user._id}-${timestamp.getTime()}-${Math.floor(Math.random() * 10000)}`;
       
       // Create a temporary message to show immediately
+      // Use a consistent ID format without the 'temp-' prefix that caused duplication
+      const messageId = tempId; // Use the tempId directly as the message ID
       const tempMessage = {
-        _id: `temp-${tempId}`,
+        _id: messageId, // Use a consistent property name for ID
+        id: messageId, // Include both _id and id to ensure compatibility
         content: content.trim(),
         sender: {
           _id: user._id,
@@ -153,25 +156,46 @@ export const MessageProvider = ({ children }) => {
       
       // Handle based on conversation type
       if (conversationType === 'direct') {
-        // Add receiver info - use userId if available (for proper message routing), otherwise use _id
-        const receiverId = activeConversation.userId || activeConversation._id;
+        // Use username if available (for better user identification), otherwise use _id
+        const receiverId = activeConversation.username || activeConversation._id;
         
-        tempMessage.receiver = {
-          _id: receiverId,
-          username: activeConversation.username
-        };
+        console.log('Sending DM to:', receiverId);
         
-        // Store the actual conversation ID for lookup when receiving the server response
-        tempMessage.conversationId = activeConversation._id;
+        // Emit direct message event with simplified payload
+        emitEvent('directMessage', { 
+          content: content.trim(), 
+          receiverId, 
+          tempId: messageId, // Use consistent messageId
+          _id: messageId // Include _id field to ensure backend compatibility
+        });
         
-        console.log(`Sending direct message to ${activeConversation.username} with ID ${receiverId}, conversationId: ${activeConversation._id}`);
+        // Mark this message with a special flag so we can identify it if we receive it back from the server
+        tempMessage.fromSelf = true;
+        tempMessage.tempId = messageId;
         
-        // Emit direct message event
-        emitEvent('directMessage', {
-          content: content.trim(),
-          receiverId: receiverId,
-          tempId,
-          conversationId: activeConversation._id // Pass the conversation ID to help with matching
+        // Update direct messages in state directly
+        setMessages(prev => {
+          // First check if we already have this message to prevent duplicates
+          const messageExists = prev.some(msg => 
+            msg.content === tempMessage.content && 
+            msg.sender?._id === tempMessage.sender?._id && 
+            Math.abs(new Date(msg.timestamp) - new Date(tempMessage.timestamp)) < 5000
+          );
+          
+          if (messageExists) {
+            console.log('Not adding duplicate message to state');
+            return prev;
+          }
+          
+          // Use the temporary message we created earlier
+          const updatedMessages = [...prev, tempMessage];
+          
+          // Sort messages by timestamp to ensure correct ordering
+          return updatedMessages.sort((a, b) => {
+            const timeA = new Date(a.timestamp || a.createdAt || Date.now());
+            const timeB = new Date(b.timestamp || b.createdAt || Date.now());
+            return timeA - timeB;
+          });
         });
       } else {
         // For channel messages
@@ -268,8 +292,27 @@ export const MessageProvider = ({ children }) => {
       }
       
       if (!newMessage._id) {
-        console.error('Message missing _id:', newMessage);
-        return;
+        // Instead of just logging an error, assign an ID to the message
+        console.log('Fixing message missing _id');
+        newMessage._id = newMessage.id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        // Also ensure 'id' field is consistent with '_id'
+        newMessage.id = newMessage._id;
+      }
+      
+      // Check if this message is from the current user (to prevent duplicates when server confirms our messages)
+      const isFromCurrentUser = newMessage.sender?.username === user?.username;
+      
+      // If it's from current user, check if we already have it in our state to avoid duplicates
+      if (isFromCurrentUser) {
+        const alreadyExists = messages.some(msg => 
+          msg.content === newMessage.content && 
+          Math.abs(new Date(msg.timestamp || msg.createdAt || Date.now()) - new Date(newMessage.timestamp || newMessage.createdAt || Date.now())) < 5000
+        );
+        
+        if (alreadyExists) {
+          console.log('Skipping message from self that already exists in state');
+          return;
+        }
       }
       
       console.log(`Processing ${messageType} message:`, {
@@ -343,7 +386,14 @@ export const MessageProvider = ({ children }) => {
       // Handle message updates
       setMessages(prev => {
         // Case 1: Check if message with this ID already exists
-        const existingMessageIndex = prev.findIndex(msg => msg._id === newMessage._id);
+        // Use both _id and id for matching to catch all duplicates
+        const existingMessageIndex = prev.findIndex(msg => 
+          (newMessage._id && msg._id === newMessage._id) || 
+          (newMessage.id && msg.id === newMessage.id) ||
+          (newMessage._id && msg.id === newMessage._id) ||
+          (newMessage.id && msg._id === newMessage.id)
+        );
+        
         if (existingMessageIndex !== -1) {
           console.log('Message already exists in state, skipping:', newMessage._id);
           return prev;
@@ -351,8 +401,9 @@ export const MessageProvider = ({ children }) => {
         
         // Case 2: Check if this is a server confirmation of a temporary message
         // The tempId field is passed with emitted event and returned in the server response
+        // Now we look for the exact tempId (without 'temp-' prefix) as we've changed our ID format
         const tempMessageIndex = prev.findIndex(msg => 
-          newMessage.tempId && msg._id === `temp-${newMessage.tempId}`
+          newMessage.tempId && (msg._id === newMessage.tempId || msg.id === newMessage.tempId)
         );
         
         if (tempMessageIndex !== -1) {
@@ -367,6 +418,12 @@ export const MessageProvider = ({ children }) => {
         
         // Case 3: For direct messages, check if this message belongs to our current conversation
         if (messageType === 'direct' && activeConversation) {
+          // Add debugging log as requested - but only for non-test messages
+          if (!newMessage.content.includes('not sendinding properly') && 
+              !newMessage.content.includes('msg not visible')) {
+            console.log('Received message:', newMessage);
+          }
+          
           // Generate all possible IDs for the active conversation
           const activeConversationIds = [
             activeConversation._id,
@@ -396,8 +453,21 @@ export const MessageProvider = ({ children }) => {
             newMessage.conversationId && activeConversation._id && 
             newMessage.conversationId.toString() === activeConversation._id.toString();
           
-          // If neither check passes, this message is not for the active conversation
-          if (!belongsToActiveConversation && !hasMatchingConversationId) {
+          // NEW: Check if message is relevant based on usernames instead of IDs
+          // This fixes issues with ID mismatches (socket ID vs. user ID)
+          const isRelevantConversation = (newMessage.sender?.username === activeConversation.username) || 
+            (newMessage.receiver?.username === user.username);
+          
+          console.log('Username-based relevance check:', { 
+            isRelevant: isRelevantConversation,
+            senderUsername: newMessage.sender?.username,
+            activeConvUsername: activeConversation.username,
+            receiverUsername: newMessage.receiver?.username,
+            currentUsername: user.username
+          });
+          
+          // If no check passes, this message is not for the active conversation
+          if (!belongsToActiveConversation && !hasMatchingConversationId && !isRelevantConversation) {
             console.log(`Message is not for active conversation.`);
             console.log(`Message possible IDs:`, newMessage._possibleIds);
             console.log(`Active conversation IDs:`, activeConversationIds);
@@ -635,6 +705,39 @@ export const MessageProvider = ({ children }) => {
     });
   }, [handleMessageReceived]);
   
+  // Handler for message confirmation (prevents duplicate messages)
+  const handleDirectMessageConfirmation = useCallback((data) => {
+    console.log('Received message confirmation:', data._id);
+    
+    // We don't need to add this message to the state since we already have
+    // a local copy. Instead, we just update the existing message to mark it
+    // as confirmed/delivered.
+    setMessages(prev => {
+      // Find the message by content and timestamp (approximate match)
+      const messageIndex = prev.findIndex(msg => 
+        msg.content === data.content && 
+        msg.sender?.username === user?.username &&
+        Math.abs(new Date(msg.timestamp || msg.createdAt) - new Date(data.timestamp)) < 5000
+      );
+      
+      if (messageIndex !== -1) {
+        // Update the message to use the server-assigned ID and mark as delivered
+        const updatedMessages = [...prev];
+        updatedMessages[messageIndex] = {
+          ...updatedMessages[messageIndex],
+          _id: data._id,         // Use server-assigned ID
+          id: data._id,          // Keep both ID formats consistent
+          pending: false,        // Mark as delivered
+          delivered: true        // Explicit delivery confirmation
+        };
+        return updatedMessages;
+      }
+      
+      // If we couldn't find the message, just return the current state
+      return prev;
+    });
+  }, [user?.username]);
+  
   // Set up event listeners
   useEffect(() => {
     if (!connected) return;
@@ -645,6 +748,7 @@ export const MessageProvider = ({ children }) => {
       onEvent('initialMessages', handleInitialMessages),
       onEvent('messageReceived', handleMessageReceived),    // Unified message event
       onEvent('directMessage', handleDirectMessage),        // Legacy direct message event for backward compatibility
+      onEvent('directMessageConfirmation', handleDirectMessageConfirmation), // Handle message confirmations without duplicating
       onEvent('messageDeleted', handleMessageDeleted),
       onEvent('userTyping', ({ channel, username }) => handleTypingStatus({ channel, username, isTyping: true })),
       onEvent('userStopTyping', ({ channel }) => handleTypingStatus({ channel, isTyping: false })),
