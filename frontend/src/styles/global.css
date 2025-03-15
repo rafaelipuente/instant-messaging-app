@@ -113,14 +113,14 @@ input, textarea, select {
   border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 14px;
-  background-color: var(--background-color);
+  background-color: var(--bg-primary);
   color: var(--text-primary);
   outline: none;
   transition: border-color 0.2s ease;
 }
 
 input:focus, textarea:focus, select:focus {
-  border-color: var(--primary-color);
+  border-color: var(--accent-color);
 }
 
 /* Container */

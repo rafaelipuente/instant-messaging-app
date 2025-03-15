@@ -17,6 +17,15 @@
   --status-offline: #94a3b8;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  
+  /* RGB values for alpha transparency */
+  --accent-color-rgb: 79, 70, 229;
+  --error-color: #ef4444;
+  --error-color-rgb: 239, 68, 68;
+  --warning-color: #f97316;
+  --warning-color-rgb: 249, 115, 22;
+  --success-color: #22c55e;
+  --success-color-rgb: 34, 197, 94;
 }
 
 /* Dark theme colors */
@@ -38,4 +47,13 @@
   --status-offline: #565f89;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+  
+  /* RGB values for alpha transparency */
+  --accent-color-rgb: 122, 162, 247;
+  --error-color: #f87171;
+  --error-color-rgb: 248, 113, 113;
+  --warning-color: #fb923c;
+  --warning-color-rgb: 251, 146, 60;
+  --success-color: #9ece6a;
+  --success-color-rgb: 158, 206, 106;
 }
