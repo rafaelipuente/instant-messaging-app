@@ -744,8 +744,7 @@ export const MessageProvider = ({ children }) => {
     
     // Register event listeners
     const cleanupFunctions = [
-      onEvent('previousMessages', handlePreviousMessages),
-      onEvent('initialMessages', handleInitialMessages),
+      onEvent('loadInitialMessages', handleInitialMessages),  // Updated to match backend event name
       onEvent('messageReceived', handleMessageReceived),    // Unified message event
       onEvent('directMessage', handleDirectMessage),        // Legacy direct message event for backward compatibility
       onEvent('directMessageConfirmation', handleDirectMessageConfirmation), // Handle message confirmations without duplicating

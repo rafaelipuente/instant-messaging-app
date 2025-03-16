@@ -137,6 +137,11 @@ const handleChannelMessage = async (io, socket, data) => {
   try {
     const { content, channel, tempId } = data;
     
+    if (!content || content.trim().length === 0) {
+      socket.emit('messageError', { error: 'Message content cannot be empty' });
+      return;
+    }
+    
     console.log(`[CHANNEL] Processing message for channel: ${channel}`, data);
     
     // Always standardize channel names to lowercase and handle dash vs space conversion
@@ -359,9 +364,41 @@ const handleMessageDeletion = async (io, socket, data) => {
   }
 };
 
+// Request tracking for throttling
+const requestTracker = {
+  requests: {},
+  isThrottled(key) {
+    const now = Date.now();
+    const request = this.requests[key] || { count: 0, lastTime: 0 };
+    const timeWindow = now - request.lastTime;
+    
+    // Allow 3 requests per 5 seconds
+    if (timeWindow < 5000 && request.count >= 3) {
+      return true;
+    }
+    
+    this.requests[key] = {
+      count: request.count + 1,
+      lastTime: now
+    };
+    return false;
+  }
+};
+
 const loadInitialMessages = async (io, socket, data) => {
   try {
     const { id, channel, type, limit = 50 } = data;
+    
+    // Track requests to prevent loops
+    const requestKey = `${socket.id}:${type}:${id || channel}`;
+    if (requestTracker.isThrottled(requestKey)) {
+      console.warn(`[THROTTLE] Too many requests for ${requestKey}`);
+      socket.emit('loadInitialMessages', {
+        error: 'Too many requests. Please wait a few seconds.',
+        throttled: true
+      });
+      return;
+    }
     
     console.log(`[LOAD] Loading initial messages:`, {
       id, channel, type, limit,
@@ -373,14 +410,16 @@ const loadInitialMessages = async (io, socket, data) => {
     
     if (!conversationId) {
       console.error('[LOAD] Missing conversationId in loadInitialMessages');
-      socket.emit('error', { message: 'Channel or conversation ID is required' });
+      socket.emit('loadInitialMessages', { error: 'Channel or conversation ID is required' });
       return;
     }
     
     // Join the room for this conversation if not already joined
     if (type === 'channel') {
       const roomName = conversationId.toString().toLowerCase();
-      const alreadyInRoom = socket.rooms.has(roomName);
+      // Check if socket is in the room using Socket.IO's built-in method
+      const rooms = Array.from(socket.rooms || []);
+      const alreadyInRoom = rooms.includes(roomName);
       
       if (!alreadyInRoom) {
         console.log(`[LOAD] Joining user ${socket.user.username} to channel room: ${roomName}`);
@@ -394,25 +433,52 @@ const loadInitialMessages = async (io, socket, data) => {
       const channelName = conversationId.toLowerCase();
       console.log(`[LOAD] Loading messages for channel: ${channelName}`);
       
-      // Get channel messages
-      const messages = await Message.find({
-        channel: channelName,
-        isDeleted: false
-      })
-        .sort({ createdAt: -1 })
-        .limit(Number(limit))
-        .populate('sender', 'username profilePicture status')
-        .lean();
+      try {
+        // Use the static method for getting channel messages
+        const messages = await Message.getChannelMessages(channelName, Number(limit));
+        if (!messages) {
+          console.error(`[LOAD] No messages found for channel: ${channelName}`);
+          socket.emit('loadInitialMessages', { 
+            error: 'No messages found',
+            type: 'channel',
+            channel: channelName
+          });
+          return;
+        }
+        
+        console.log(`[LOAD] Found ${messages.length} channel messages`);
+        
+        // Transform and send messages - important to pass the correct event name
+        const transformedMessages = messages.map(transformMessage).reverse(); // Reverse to get chronological order
+        console.log(`[LOAD] Emitting ${transformedMessages.length} channel messages for ${channelName}`);
+        socket.emit('loadInitialMessages', {
+          channel: channelName,
+          messages: transformedMessages,
+          type: 'channel',
+          timestamp: new Date().toISOString()
+        });
+        
+        return transformedMessages;
+      } catch (error) {
+        console.error(`[LOAD] Error loading channel messages:`, error);
+        socket.emit('loadInitialMessages', { 
+          error: 'Error loading channel messages',
+          type: 'channel',
+          channel: channelName
+        });
+        return;
+      }
       
       console.log(`[LOAD] Found ${messages.length} channel messages`);
       
       // Transform and send messages - important to pass the correct event name
       const transformedMessages = messages.map(transformMessage).reverse(); // Reverse to get chronological order
       console.log(`[LOAD] Emitting ${transformedMessages.length} channel messages for ${channelName}`);
-      socket.emit('initialMessages', {
+      socket.emit('loadInitialMessages', {
         channel: channelName,
         messages: transformedMessages,
-        type: 'channel'
+        type: 'channel',
+        timestamp: new Date().toISOString()
       });
       
       return transformedMessages;
@@ -423,6 +489,10 @@ const loadInitialMessages = async (io, socket, data) => {
         try {
           // Store original value for response
           const originalId = conversationId;
+          // Validate ObjectId format
+          if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+            throw new Error('Invalid conversation ID format');
+          }
           conversationId = new mongoose.Types.ObjectId(conversationId);
           
           const conversation = await Conversation.findById(conversationId);
@@ -440,22 +510,55 @@ const loadInitialMessages = async (io, socket, data) => {
               throw new Error('Invalid direct conversation participants');
             }
             
-            // Load direct messages
-            const messages = await Message.getDirectMessages(
-              participants[0],
-              participants[1],
-              Number(limit)
-            );
-            
-            console.log(`[LOAD] Found ${messages.length} direct messages`);
+            try {
+              // Load direct messages using the static method
+              const messages = await Message.getDirectMessages(
+                participants[0],
+                participants[1],
+                Number(limit)
+              );
+              
+              if (!messages) {
+                console.error(`[LOAD] No messages found for conversation: ${originalId}`);
+                socket.emit('loadInitialMessages', { 
+                  error: 'No messages found',
+                  type: 'direct',
+                  conversationId: originalId
+                });
+                return;
+              }
+              
+              console.log(`[LOAD] Found ${messages.length} direct messages`);
+              
+              // Transform and send messages
+              const transformedMessages = messages.map(transformMessage);
+              console.log(`[LOAD] Emitting ${transformedMessages.length} direct messages for conversation ${originalId}`);
+              socket.emit('loadInitialMessages', {
+                conversationId: originalId,
+                messages: transformedMessages,
+                type: 'direct',
+                timestamp: new Date().toISOString()
+              });
+              
+              return transformedMessages;
+            } catch (error) {
+              console.error(`[LOAD] Error loading direct messages:`, error);
+              socket.emit('loadInitialMessages', { 
+                error: 'Error loading direct messages',
+                type: 'direct',
+                conversationId: originalId
+              });
+              return;
+            }
             
             // Transform and send messages
             const transformedMessages = messages.map(transformMessage);
             console.log(`[LOAD] Emitting ${transformedMessages.length} direct messages for conversation ${originalId}`);
-            socket.emit('initialMessages', {
-              channel: originalId,
+            socket.emit('loadInitialMessages', {
+              conversationId: originalId,
               messages: transformedMessages,
-              type: 'direct'
+              type: 'direct',
+              timestamp: new Date().toISOString()
             });
             
             return transformedMessages;
@@ -466,7 +569,11 @@ const loadInitialMessages = async (io, socket, data) => {
           }
         } catch (error) {
           console.error('[LOAD] Error processing conversation ID:', error);
-          socket.emit('error', { message: 'Error loading messages' });
+          socket.emit('loadInitialMessages', { 
+            error: 'Invalid conversation ID format',
+            errorType: 'INVALID_ID'
+          });
+          return;
         }
       } catch (error) {
         console.error('[LOAD] Error in loadInitialMessages:', error);
