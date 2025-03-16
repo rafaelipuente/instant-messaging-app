@@ -769,11 +769,36 @@ const MessagingHub = () => {
                         <p>Start a conversation with {activeConversation?.username || 'this user'}.</p>
                       </div>
                     ) : (
-                      messages.map(msg => (
-                        <div 
-                          key={msg._id} 
-                          className={`message ${isCurrentUser(msg.sender?._id) ? 'sent' : 'received'} ${msg.isDeleted ? 'deleted' : ''} ${msg.pending ? 'pending' : ''}`}
-                        >
+                      messages.map(msg => {
+                        // Generate a stable unique key using tempId or _id
+                        const messageKey = msg.tempId || msg._id;
+                        
+                        // Skip rendering if no valid key
+                        if (!messageKey) {
+                          console.error('[MESSAGE RENDER] Message missing ID:', {
+                            content: msg.content?.substring(0, 20),
+                            sender: msg.sender?.username,
+                            timestamp: msg.timestamp || msg.createdAt
+                          });
+                          return null;
+                        }
+                        
+                        // Log message details for debugging
+                        console.log('[MESSAGE RENDER]', {
+                          key: messageKey,
+                          id: msg._id,
+                          tempId: msg.tempId,
+                          pending: msg.pending,
+                          sender: msg.sender?.username
+                        });
+                        
+                        return (
+                          <div 
+                            key={messageKey}
+                            data-message-id={msg._id}
+                            data-temp-id={msg.tempId}
+                            className={`message ${isCurrentUser(msg.sender?._id) ? 'sent' : 'received'} ${msg.isDeleted ? 'deleted' : ''} ${msg.pending ? 'pending' : ''}`}
+                          >
                           <div className="message-avatar">
                             <UserAvatar 
                               profilePicture={getProfilePicture(msg.sender?.profilePicture)} 
@@ -806,7 +831,9 @@ const MessagingHub = () => {
                             )}
                           </div>
                         </div>
-                      ))
+                      );
+                    })
+                    .filter(Boolean) // Remove any null messages
                     )}
                     {typing && (
                       <div className="typing-indicator">

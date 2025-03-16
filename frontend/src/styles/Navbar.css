@@ -1,15 +1,16 @@
-/* Navbar.css - modern design */
+/* Navbar.css - modern design with theme support */
 
 .navbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem 1rem;
-  background-color: #1a1b26;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
   height: 48px;
   z-index: 1000;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .navbar .container {
@@ -26,11 +27,12 @@
 .navbar-brand {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--text-primary);
   text-decoration: none;
   display: flex;
   align-items: center;
   gap: 8px;
+  transition: color 0.2s ease;
 }
 
 .navbar-brand a {
@@ -90,7 +92,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   font-weight: 500;
   border-radius: 4px;
@@ -107,12 +109,14 @@
   top: 100%;
   right: 0;
   margin-top: 8px;
-  background: white;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-lg);
   padding: 6px;
   min-width: 180px;
   z-index: 1000;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .profile-menu-item {
@@ -120,26 +124,30 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  color: #64748b;
+  color: var(--text-secondary);
   text-decoration: none;
   font-size: 0.85rem;
   border-radius: 4px;
   transition: all 0.2s ease;
   cursor: pointer;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
 }
 
 .profile-menu-item:hover {
-  color: #0284c7;
-  background: rgba(2, 132, 199, 0.05);
+  color: var(--accent-color);
+  background: var(--hover-bg);
 }
 
 .profile-menu-item.danger {
-  color: #ef4444;
+  color: var(--error-color);
 }
 
 .profile-menu-item.danger:hover {
-  color: #dc2626;
-  background: rgba(239, 68, 68, 0.05);
+  color: var(--error-hover);
+  background: var(--error-bg);
 }
 
 .theme-toggle {
@@ -147,7 +155,7 @@
   border: none;
   font-size: 1.1rem;
   cursor: pointer;
-  color: #64748b;
+  color: var(--text-secondary);
   padding: 4px;
   border-radius: 4px;
   display: flex;
@@ -182,7 +190,8 @@
   border: none;
   padding: 8px;
   cursor: pointer;
-  color: #64748b;
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
 }
 
 .hamburger:hover {

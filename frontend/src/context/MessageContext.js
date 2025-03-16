@@ -27,7 +27,6 @@ export const MessageProvider = ({ children }) => {
   // Function to load messages for a conversation
   const loadMessages = useCallback((conversation, type) => {
     if (!connected) {
-      
       return false;
     }
 
@@ -133,12 +132,9 @@ export const MessageProvider = ({ children }) => {
       // Create a unique tempId that includes the user's ID to ensure uniqueness across different users
       const tempId = `${user._id}-${timestamp.getTime()}-${Math.floor(Math.random() * 10000)}`;
       
-      // Create a temporary message to show immediately
-      // Use a consistent ID format without the 'temp-' prefix that caused duplication
-      const messageId = tempId; // Use the tempId directly as the message ID
+      // Create a temporary message with consistent ID handling
       const tempMessage = {
-        _id: messageId, // Use a consistent property name for ID
-        id: messageId, // Include both _id and id to ensure compatibility
+        _id: tempId, // Use tempId directly as _id
         content: content.trim(),
         sender: {
           _id: user._id,
@@ -146,8 +142,15 @@ export const MessageProvider = ({ children }) => {
           profilePicture: user.profilePicture
         },
         timestamp,
-        pending: true
+        pending: true,
+        tempId // Store tempId for matching with server response
       };
+      
+      console.log('[MESSAGE] Created temporary message:', {
+        _id: tempMessage._id,
+        tempId: tempMessage.tempId,
+        content: tempMessage.content.substring(0, 20)
+      });
       
       console.log(`Sending ${conversationType} message:`, {
         content: content.trim(),
@@ -161,67 +164,133 @@ export const MessageProvider = ({ children }) => {
         
         console.log('Sending DM to:', receiverId);
         
-        // Emit direct message event with simplified payload
-        emitEvent('directMessage', { 
-          content: content.trim(), 
-          receiverId, 
-          tempId: messageId, // Use consistent messageId
-          _id: messageId // Include _id field to ensure backend compatibility
+        // Emit direct message event
+        const messagePayload = {
+          content: content.trim(),
+          receiverId,
+          tempId // Use tempId from above
+        };
+        
+        console.log('[MESSAGE] Sending direct message:', {
+          to: receiverId,
+          tempId,
+          content: content.trim().substring(0, 20)
         });
         
-        // Mark this message with a special flag so we can identify it if we receive it back from the server
-        tempMessage.fromSelf = true;
-        tempMessage.tempId = messageId;
+        emitEvent('directMessage', messagePayload);
         
-        // Update direct messages in state directly
+        // Mark message as from self and add to state
+        tempMessage.fromSelf = true;
+        
+        // Add message to state with duplicate prevention
         setMessages(prev => {
-          // First check if we already have this message to prevent duplicates
-          const messageExists = prev.some(msg => 
-            msg.content === tempMessage.content && 
-            msg.sender?._id === tempMessage.sender?._id && 
-            Math.abs(new Date(msg.timestamp) - new Date(tempMessage.timestamp)) < 5000
-          );
+          // Check for any kind of duplicate using tempId or content matching
+          const isDuplicate = prev.some(msg => {
+            // Check tempId match first
+            if (msg.tempId && msg.tempId === tempMessage.tempId) {
+              console.log('[MESSAGE] Found duplicate by tempId:', msg.tempId);
+              return true;
+            }
+            
+            // Check content + sender + time match as fallback
+            const contentMatch = msg.content === tempMessage.content;
+            const senderMatch = msg.sender?._id === tempMessage.sender?._id;
+            const timeMatch = Math.abs(
+              new Date(msg.timestamp || msg.createdAt) - 
+              new Date(tempMessage.timestamp || tempMessage.createdAt)
+            ) < 2000; // Reduced time window for stricter matching
+            
+            const isMatch = contentMatch && senderMatch && timeMatch;
+            if (isMatch) {
+              console.log('[MESSAGE] Found content match:', {
+                existing: msg._id,
+                new: tempMessage._id,
+                content: msg.content.substring(0, 20)
+              });
+              console.log('[MESSAGE] Found duplicate by content match');
+              return true;
+            }
+            
+            return false;
+          });
           
-          if (messageExists) {
-            console.log('Not adding duplicate message to state');
+          if (isDuplicate) {
+            console.log('[MESSAGE] Prevented duplicate message:', tempMessage.tempId);
             return prev;
           }
           
-          // Use the temporary message we created earlier
-          const updatedMessages = [...prev, tempMessage];
+          // Add new message and sort by timestamp
+          const updatedMessages = [...prev, tempMessage].sort((a, b) => 
+            new Date(a.timestamp || a.createdAt || Date.now()) -
+            new Date(b.timestamp || b.createdAt || Date.now())
+          );
           
-          // Sort messages by timestamp to ensure correct ordering
-          return updatedMessages.sort((a, b) => {
-            const timeA = new Date(a.timestamp || a.createdAt || Date.now());
-            const timeB = new Date(b.timestamp || b.createdAt || Date.now());
-            return timeA - timeB;
+          console.log('[MESSAGE] Added message to state:', {
+            _id: tempMessage._id,
+            tempId: tempMessage.tempId,
+            total: updatedMessages.length
           });
+          
+          return updatedMessages;
         });
       } else {
-        // For channel messages
+        // Handle channel messages
         const channelName = activeConversation.name || 
-                          (typeof activeConversation === 'string' ? activeConversation : 
-                           activeConversation.id || activeConversation._id);
+          (typeof activeConversation === 'string' ? activeConversation : 
+           activeConversation.id || activeConversation._id);
         
         if (!channelName) {
-          console.error('Cannot send channel message: Missing channel name', activeConversation);
+          console.error('[CHANNEL] Cannot send message: Missing channel name', activeConversation);
           toast.error('Cannot send message to this channel');
           return false;
         }
         
-        // Add channel to temp message
+        // Add channel info to temp message
         tempMessage.channel = channelName;
+        tempMessage.messageType = 'channel';
         
-        // Emit channel message event
+        console.log('[CHANNEL] Sending message:', {
+          channel: channelName,
+          tempId: tempMessage.tempId,
+          content: content.trim().substring(0, 20)
+        });
+        
+        // Emit channel message with consistent payload
         emitEvent('channelMessage', {
           content: content.trim(),
           channel: channelName,
-          tempId
+          tempId: tempMessage.tempId
+        });
+        
+        // Add message to state for channel messages
+        setMessages(prev => {
+          const isDuplicate = prev.some(msg => {
+            if (msg.tempId && msg.tempId === tempMessage.tempId) {
+              return true;
+            }
+
+            const contentMatch = msg.content === tempMessage.content;
+            const senderMatch = msg.sender?._id === tempMessage.sender?._id;
+            const timeMatch = Math.abs(
+              new Date(msg.timestamp || msg.createdAt) - 
+              new Date(tempMessage.timestamp || tempMessage.createdAt)
+            ) < 2000;
+
+            return contentMatch && senderMatch && timeMatch;
+          });
+
+          if (isDuplicate) {
+            return prev;
+          }
+
+          return [...prev, tempMessage].sort((a, b) => 
+            new Date(a.timestamp || a.createdAt || Date.now()) -
+            new Date(b.timestamp || b.createdAt || Date.now())
+          );
         });
       }
       
-      // Add temporary message to state
-      setMessages(prev => [...prev, tempMessage]);
+      // Removed redundant setMessages call
       return true;
     } catch (error) {
       console.error('Error sending message:', error);
@@ -256,13 +325,13 @@ export const MessageProvider = ({ children }) => {
 
   // Handler for receiving messages from either channels or direct messages
   const handleMessageReceived = useCallback((data) => {
+    console.log('Received message:', data);
+    if (!data) {
+      console.error('Received null or undefined message data');
+      return;
+    }
+    
     try {
-      console.log('Received message:', data);
-      if (!data) {
-        console.error('Received null or undefined message data');
-        return;
-      }
-      
       // Check for legacy or new message format
       let newMessage;
       let messageType;
@@ -299,20 +368,44 @@ export const MessageProvider = ({ children }) => {
         newMessage.id = newMessage._id;
       }
       
-      // Check if this message is from the current user (to prevent duplicates when server confirms our messages)
-      const isFromCurrentUser = newMessage.sender?.username === user?.username;
-      
-      // If it's from current user, check if we already have it in our state to avoid duplicates
-      if (isFromCurrentUser) {
-        const alreadyExists = messages.some(msg => 
-          msg.content === newMessage.content && 
-          Math.abs(new Date(msg.timestamp || msg.createdAt || Date.now()) - new Date(newMessage.timestamp || newMessage.createdAt || Date.now())) < 5000
-        );
-        
-        if (alreadyExists) {
-          console.log('Skipping message from self that already exists in state');
-          return;
+      // Enhanced duplicate detection for all messages
+      const isDuplicate = messages.some(msg => {
+        // Check for exact ID matches first
+        if (msg._id === newMessage._id || msg.id === newMessage._id || msg._id === newMessage.id) {
+          console.log('Found exact ID match, skipping duplicate');
+          return true;
         }
+
+        // For messages from the same sender, do content + timestamp comparison
+        if (msg.sender?._id === newMessage.sender?._id || msg.sender?.username === newMessage.sender?.username) {
+          const contentMatch = msg.content === newMessage.content;
+          const msgTime = new Date(msg.timestamp || msg.createdAt || Date.now());
+          const newTime = new Date(newMessage.timestamp || newMessage.createdAt || Date.now());
+          const timeMatch = Math.abs(msgTime - newTime) < 5000; // 5 second window
+
+          if (contentMatch && timeMatch) {
+            console.log('Found content+time match from same sender, skipping duplicate');
+            return true;
+          }
+        }
+
+        // For messages with tempId, check if we already have a message with this tempId
+        if (newMessage.tempId && (msg._id === newMessage.tempId || msg.id === newMessage.tempId)) {
+          console.log('Found tempId match, skipping duplicate');
+          return true;
+        }
+
+        return false;
+      });
+
+      if (isDuplicate) {
+        console.log('Skipping duplicate message:', {
+          id: newMessage._id,
+          tempId: newMessage.tempId,
+          sender: newMessage.sender?.username,
+          content: newMessage.content.substring(0, 20)
+        });
+        return;
       }
       
       console.log(`Processing ${messageType} message:`, {
@@ -383,150 +476,249 @@ export const MessageProvider = ({ children }) => {
         }
       }
       
-      // Handle message updates
-      setMessages(prev => {
-        // Case 1: Check if message with this ID already exists
-        // Use both _id and id for matching to catch all duplicates
-        const existingMessageIndex = prev.findIndex(msg => 
-          (newMessage._id && msg._id === newMessage._id) || 
-          (newMessage.id && msg.id === newMessage.id) ||
-          (newMessage._id && msg.id === newMessage._id) ||
-          (newMessage.id && msg._id === newMessage.id)
-        );
-        
-        if (existingMessageIndex !== -1) {
-          console.log('Message already exists in state, skipping:', newMessage._id);
-          return prev;
-        }
-        
-        // Case 2: Check if this is a server confirmation of a temporary message
-        // The tempId field is passed with emitted event and returned in the server response
-        // Now we look for the exact tempId (without 'temp-' prefix) as we've changed our ID format
-        const tempMessageIndex = prev.findIndex(msg => 
-          newMessage.tempId && (msg._id === newMessage.tempId || msg.id === newMessage.tempId)
-        );
-        
-        if (tempMessageIndex !== -1) {
-          console.log('Replacing temporary message with server version:', newMessage.tempId);
-          const updatedMessages = [...prev];
-          updatedMessages[tempMessageIndex] = {
-            ...newMessage,
-            pending: false // Clear the pending flag
-          };
-          return updatedMessages;
-        }
-        
-        // Case 3: For direct messages, check if this message belongs to our current conversation
-        if (messageType === 'direct' && activeConversation) {
-          // Add debugging log as requested - but only for non-test messages
-          if (!newMessage.content.includes('not sendinding properly') && 
-              !newMessage.content.includes('msg not visible')) {
-            console.log('Received message:', newMessage);
-          }
-          
-          // Generate all possible IDs for the active conversation
-          const activeConversationIds = [
-            activeConversation._id,
-            activeConversation.userId,
-            activeConversation.conversationId
-          ].filter(Boolean); // Remove undefined values
-          
-          // If user is in the conversation, add combination IDs
-          if (user?._id && (activeConversation._id || activeConversation.userId)) {
-            const otherId = activeConversation._id || activeConversation.userId;
-            
-            // Add sorted standard format
-            const sortedIds = [user._id.toString(), otherId.toString()].sort();
-            activeConversationIds.push(`dm_${sortedIds[0]}_${sortedIds[1]}`);
-            
-            // Add direct combinations
-            activeConversationIds.push(`${user._id}-${otherId}`);
-            activeConversationIds.push(`${otherId}-${user._id}`);
-          }
-          
-          // Check for any intersection between message IDs and active conversation IDs
-          const belongsToActiveConversation = newMessage._possibleIds && 
-            newMessage._possibleIds.some(id => activeConversationIds.includes(id));
-          
-          // Special check for real MongoDB conversation ID (highest priority)
-          const hasMatchingConversationId = 
-            newMessage.conversationId && activeConversation._id && 
-            newMessage.conversationId.toString() === activeConversation._id.toString();
-          
-          // NEW: Check if message is relevant based on usernames instead of IDs
-          // This fixes issues with ID mismatches (socket ID vs. user ID)
-          const isRelevantConversation = (newMessage.sender?.username === activeConversation.username) || 
-            (newMessage.receiver?.username === user.username);
-          
-          console.log('Username-based relevance check:', { 
-            isRelevant: isRelevantConversation,
-            senderUsername: newMessage.sender?.username,
-            activeConvUsername: activeConversation.username,
-            receiverUsername: newMessage.receiver?.username,
-            currentUsername: user.username
+      try {
+        // Handle message updates
+        setMessages(prev => {
+          // Log incoming message details
+          console.log('[MESSAGE UPDATE] Processing message:', {
+            _id: newMessage._id,
+            tempId: newMessage.tempId,
+            sender: newMessage.sender?.username,
+            content: newMessage.content.substring(0, 20)
           });
           
-          // If no check passes, this message is not for the active conversation
-          if (!belongsToActiveConversation && !hasMatchingConversationId && !isRelevantConversation) {
-            console.log(`Message is not for active conversation.`);
-            console.log(`Message possible IDs:`, newMessage._possibleIds);
-            console.log(`Active conversation IDs:`, activeConversationIds);
+          // First check if we already have this message
+          const existingMessage = prev.find(msg => {
+            // Check exact ID match
+            if (msg._id === newMessage._id) {
+              console.log('[MESSAGE UPDATE] Found exact ID match:', msg._id);
+              return true;
+            }
             
-            // Don't add to the current message list
+            // Check tempId match (for pending -> confirmed)
+            if (msg.tempId && newMessage.tempId && msg.tempId === newMessage.tempId) {
+              console.log('[MESSAGE UPDATE] Found tempId match:', msg.tempId);
+              return true;
+            }
+            
+            // Check content + sender + time match as fallback
+            const contentMatch = msg.content === newMessage.content;
+            const senderMatch = msg.sender?._id === newMessage.sender?._id;
+            const timeMatch = Math.abs(
+              new Date(msg.timestamp || msg.createdAt) - 
+              new Date(newMessage.timestamp || newMessage.createdAt)
+            ) < 2000; // Reduced from 5000ms to 2000ms for stricter matching
+            
+            const isMatch = contentMatch && senderMatch && timeMatch;
+            if (isMatch) {
+              console.log('[MESSAGE UPDATE] Found content match:', {
+                existingId: msg._id,
+                existingTempId: msg.tempId,
+                newId: newMessage._id,
+                newTempId: newMessage.tempId,
+                content: msg.content.substring(0, 20)
+              });
+            }
+            return isMatch;
+          });
+          
+          if (existingMessage) {
+            // If this is a confirmation of a pending message, update it
+            if (existingMessage.pending && !newMessage.pending) {
+              console.log('[MESSAGE UPDATE] Confirming pending message:', {
+                tempId: existingMessage.tempId,
+                newId: newMessage._id
+              });
+              
+              return prev.map(msg =>
+                msg.tempId === existingMessage.tempId
+                  ? { ...newMessage, pending: false }
+                  : msg
+              );
+            }
+            
+            // Otherwise, it's a true duplicate - ignore it
+            console.log('[MESSAGE UPDATE] Ignoring duplicate message:', {
+              existingId: existingMessage._id,
+              newId: newMessage._id,
+              content: newMessage.content.substring(0, 20)
+            });
             return prev;
-          } else {
-            console.log(`Message BELONGS to active conversation!`);
           }
-        }
-        
-        // Case 4: This is a completely new message for our current conversation
-        // Ensure messages are in chronological order
-        const updatedMessages = [...prev, newMessage];
-        return updatedMessages.sort((a, b) => {
-          const timeA = new Date(a.timestamp || a.createdAt || Date.now());
-          const timeB = new Date(b.timestamp || b.createdAt || Date.now());
-          return timeA - timeB;
+          
+          // For direct messages, verify this belongs to the current conversation
+          if (messageType === 'direct' && activeConversation) {
+            console.log('[MESSAGE UPDATE] Checking conversation match:', {
+              messageId: newMessage._id,
+              conversationId: newMessage.conversationId,
+              activeConversationId: activeConversation._id
+            });
+            
+            // Build list of valid IDs for the active conversation
+            const validConversationIds = new Set([
+              // Direct IDs
+              activeConversation._id?.toString(),
+              activeConversation.userId?.toString(),
+              // Special format
+              activeConversation.conversationId?.toString()
+            ].filter(Boolean));
+            
+            // Add dm_ format ID if we have both user IDs
+            if (user?._id && (activeConversation._id || activeConversation.userId)) {
+              const otherId = activeConversation._id || activeConversation.userId;
+              const [id1, id2] = [user._id.toString(), otherId.toString()].sort();
+              validConversationIds.add(`dm_${id1}_${id2}`);
+            }
+            
+            console.log('[MESSAGE UPDATE] Valid conversation IDs:', 
+              Array.from(validConversationIds));
+            
+            // Check if message belongs to this conversation
+            const belongsToConversation = 
+              // Check conversation ID match
+              (newMessage.conversationId && 
+               validConversationIds.has(newMessage.conversationId.toString())) ||
+              // Check possible IDs match
+              (newMessage._possibleIds && 
+               newMessage._possibleIds.some(id => validConversationIds.has(id)));
+            
+            // Check message relevance by usernames and IDs
+            const isRelevantConversation = (
+              // Sender matches active conversation
+              newMessage.sender?.username === activeConversation.username ||
+              // Receiver matches active conversation
+              newMessage.receiver?.username === activeConversation.username ||
+              // Current user is receiver
+              newMessage.receiver?.username === user.username ||
+              // Current user is sender
+              newMessage.sender?.username === user.username
+            );
+            
+            console.log('[MESSAGE UPDATE] Conversation relevance:', {
+              messageId: newMessage._id,
+              tempId: newMessage.tempId,
+              isRelevant: isRelevantConversation,
+              belongsToConversation,
+              sender: newMessage.sender?.username,
+              receiver: newMessage.receiver?.username,
+              activeUser: activeConversation.username
+            });
+            
+            // Skip if message doesn't belong to this conversation
+            if (!belongsToConversation && !isRelevantConversation) {
+              console.log('[MESSAGE UPDATE] Message not for active conversation:', {
+                messageId: newMessage._id,
+                conversationId: newMessage.conversationId
+              });
+              return prev;
+            }
+            
+            // Check for duplicates with comprehensive matching
+            const isDuplicate = prev.some(msg => {
+              // Check exact ID match
+              if (msg._id === newMessage._id) {
+                console.log('[MESSAGE UPDATE] Found exact ID match:', msg._id);
+                return true;
+              }
+              
+              // Check tempId match
+              if (msg.tempId && newMessage.tempId && msg.tempId === newMessage.tempId) {
+                console.log('[MESSAGE UPDATE] Found tempId match:', msg.tempId);
+                return true;
+              }
+              
+              // Check content + sender + time match as fallback
+              const contentMatch = msg.content === newMessage.content;
+              const senderMatch = msg.sender?._id === newMessage.sender?._id;
+              const timeMatch = Math.abs(
+                new Date(msg.timestamp || msg.createdAt) - 
+                new Date(newMessage.timestamp || newMessage.createdAt)
+              ) < 2000; // Reduced time window for stricter matching
+              
+              const isMatch = contentMatch && senderMatch && timeMatch;
+              if (isMatch) {
+                console.log('[MESSAGE UPDATE] Found content match:', {
+                  existingId: msg._id,
+                  existingTempId: msg.tempId,
+                  newId: newMessage._id,
+                  newTempId: newMessage.tempId,
+                  content: msg.content.substring(0, 20)
+                });
+              }
+              return isMatch;
+            });
+            
+            if (isDuplicate) {
+              console.log('[MESSAGE UPDATE] Prevented duplicate message:', {
+                _id: newMessage._id,
+                tempId: newMessage.tempId,
+                content: newMessage.content.substring(0, 20)
+              });
+              return prev;
+            }
+          }
+          
+          // Add new message with consistent ID handling
+          const messageToAdd = {
+            ...newMessage,
+            _id: newMessage._id || newMessage.tempId,
+            timestamp: newMessage.timestamp || newMessage.createdAt || Date.now(),
+            pending: false
+          };
+          
+          return [...prev, messageToAdd].sort((a, b) => {
+            const timeA = new Date(a.timestamp || a.createdAt || Date.now());
+            const timeB = new Date(b.timestamp || b.createdAt || Date.now());
+            return timeA - timeB;
+          });
         });
-      });
-      
-      // Handle unread count if this is for a different conversation
-      if (messageType === 'channel' && 
-          activeConversation && 
-          newMessage.channel !== (activeConversation.id || activeConversation._id || activeConversation.name)) {
-        setUnreadMessages(prev => ({
-          ...prev,
-          [newMessage.channel]: (prev[newMessage.channel] || 0) + 1
-        }));
-      }
-      
-      // Handle unread count for direct messages
-      if (messageType === 'direct' && 
-          newMessage.sender && user && newMessage.sender._id !== user._id) {
         
-        // Check if this message is from a different sender than our active conversation
-        const isFromDifferentSender = !activeConversation || 
-          (activeConversation._id !== newMessage.sender._id && 
-           activeConversation.userId !== newMessage.sender._id);
-        
-        if (isFromDifferentSender) {
+        // Handle unread count if this is for a different conversation
+        if (messageType === 'channel' && 
+            activeConversation && 
+            newMessage.channel !== (activeConversation.id || activeConversation._id || activeConversation.name)) {
           setUnreadMessages(prev => ({
             ...prev,
-            [newMessage.sender._id]: (prev[newMessage.sender._id] || 0) + 1
+            [newMessage.channel]: (prev[newMessage.channel] || 0) + 1
           }));
-          console.log(`Incremented unread count for ${newMessage.sender._id}`);
         }
+        
+        // Handle unread count for direct messages
+        if (messageType === 'direct' && 
+            newMessage.sender && user && newMessage.sender._id !== user._id) {
+          
+          // Check if this message is from a different sender than our active conversation
+          const isFromDifferentSender = !activeConversation || 
+            (activeConversation._id !== newMessage.sender._id && 
+             activeConversation.userId !== newMessage.sender._id);
+          
+          if (isFromDifferentSender) {
+            setUnreadMessages(prev => ({
+              ...prev,
+              [newMessage.sender._id]: (prev[newMessage.sender._id] || 0) + 1
+            }));
+            console.log(`Incremented unread count for ${newMessage.sender._id}`);
+          }
+        }
+      } catch (error) {
+        console.error('Error handling received message:', error);
+        console.error('Problematic message data:', data);
       }
-      
     } catch (error) {
-      console.error('Error handling received message:', error);
-      console.error('Problematic message data:', data);
+      console.error('Error processing message:', error);
+      toast.error('Failed to process message');
     }
-  }, [activeConversation, user]);
+  }, [activeConversation, user, messages]);
 
   // Handler for receiving previous messages
   const handlePreviousMessages = useCallback((receivedMessages) => {
-    setMessages(receivedMessages);
-    setLoading(false);
+    try {
+      setMessages(receivedMessages);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error handling previous messages:', error);
+      setLoading(false);
+    }
   }, []);
 
   // Handler for initial messages
@@ -779,6 +971,7 @@ export const MessageProvider = ({ children }) => {
     handleInitialMessages,
     handleMessageReceived,
     handleDirectMessage,
+    handleDirectMessageConfirmation,
     handleMessageDeleted,
     handleTypingStatus,
     handleGlobalDirectMessage,

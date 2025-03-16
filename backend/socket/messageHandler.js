@@ -228,22 +228,33 @@ const handleDirectMessage = async (io, socket, data) => {
     // Find or create the conversation between the users
     const conversation = await Conversation.findOrCreateDirectConversation(senderId, receiverId);
     
-    // Create and save the message
+    // Create message with explicit ID handling
+    const messageId = new mongoose.Types.ObjectId();
+    console.log('[DIRECT MESSAGE] Generated new message ID:', messageId.toString());
+    
     const message = new Message({
+      _id: messageId,
       sender: senderId,
       receiver: receiverId,
       content,
-      messageType: 'direct' // Ensure messageType is set correctly
+      messageType: 'direct',
+      conversationId: conversation._id,
+      tempId // Store tempId for client reconciliation
     });
     
-    // Add the conversation ID to the message object
-    message.conversationId = conversation._id;
-
+    // Save and populate the message
     await message.save();
-    console.log(`[DIRECT MESSAGE] Direct message saved with ID: ${message._id}`);
-    
     await message.populate('sender', 'username profilePicture status');
     await message.populate('receiver', 'username profilePicture status');
+    
+    // Log complete message details
+    console.log('[DIRECT MESSAGE] Saved message:', {
+      _id: message._id.toString(),
+      tempId,
+      sender: message.sender.username,
+      receiver: message.receiver.username,
+      conversationId: message.conversationId.toString()
+    });
 
     // Update users' conversations
     const [sender, receiver] = await Promise.all([
@@ -260,13 +271,23 @@ const handleDirectMessage = async (io, socket, data) => {
     conversation.lastActivity = new Date();
     await conversation.save();
 
-    // Convert message to JSON to add additional properties
+    // Convert message to JSON with all necessary properties
     const messageJson = message.toObject();
-    messageJson.conversationId = conversation._id;
     
-    // Log broadcast activity for debugging
-    console.log(`[DIRECT MESSAGE] Broadcasting message to users: ${senderId} and ${receiverId}`);
-    console.log(`[DIRECT MESSAGE] Message content: "${content.substring(0, 20)}${content.length > 20 ? '...' : ''}"`);
+    // Ensure all IDs are properly set
+    messageJson._id = message._id;
+    messageJson.conversationId = conversation._id;
+    messageJson.tempId = tempId; // Keep tempId for client reconciliation
+    
+    // Log broadcast details
+    console.log('[DIRECT MESSAGE] Broadcasting message:', {
+      _id: messageJson._id.toString(),
+      tempId: messageJson.tempId,
+      conversationId: messageJson.conversationId.toString(),
+      sender: messageJson.sender.username,
+      receiver: messageJson.receiver.username,
+      contentPreview: content.substring(0, 20) + (content.length > 20 ? '...' : '')
+    });
     
     // Add conversation ID to message for better routing
     const conversationStr = conversation._id.toString();
