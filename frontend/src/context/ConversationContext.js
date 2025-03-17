@@ -17,15 +17,13 @@ export const useConversations = () => {
 
 export const ConversationProvider = ({ children }) => {
   const { user } = useAuth();
-  const { connected, onEvent } = useSocket();
+  const { socket, connected } = useSocket(); // Updated to use socket and connected directly
   const [channels, setChannels] = useState([]);
   const [directConversations, setDirectConversations] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Default channels - ensure consistent naming with backend
-  // IMPORTANT: The 'id' should match the channel name in the database (lowercase with hyphens)
-  // while the 'name' is the display name (properly capitalized)
   const defaultChannels = [
     { id: 'general', name: 'General', icon: '🌐', isDefaultChannel: true },
     { id: 'tech-talk', name: 'Tech Talk', icon: '💻', isDefaultChannel: true },
@@ -36,65 +34,57 @@ export const ConversationProvider = ({ children }) => {
   // Function to fetch channels
   const fetchChannels = useCallback(async () => {
     if (!user?.token) return;
-    
+
     try {
       setLoading(true);
       console.log('Fetching channels...');
-      
+
       const response = await fetch(`${API_BASE_URL}/conversations?type=channel`, {
         headers: {
           'Authorization': `Bearer ${user.token}`
         },
         credentials: 'include'
       });
-      
+
       if (!response.ok) {
-        throw new Error('Failed to fetch channels');
+        throw new Error(`Failed to fetch channels: ${response.status} ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       console.log('Received channels data:', data);
-      
+
       // Ensure default channels are always present
       const allChannels = [...defaultChannels];
-      
+
       // Add any custom channels from the database
       data.forEach(channel => {
-        // Skip any channels with name "genral" (likely misspelled)
         if (channel.name.toLowerCase() === 'genral') {
           return;
         }
-        
-        // Check if this is one of our default channels by name
+
         const isDefaultChannel = defaultChannels.some(dc => dc.id === channel.name);
-        
+
         if (isDefaultChannel) {
-          // This is a default channel - use the predefined ID (channel name) for consistency
-          // Update any fields from the server version
-          const defaultChannel = defaultChannels.find(dc => dc.id === channel.name);
+          const defaultChannel = allChannels.find(dc => dc.id === channel.name);
           if (defaultChannel) {
-            // Update the default channel with server data if available
-            // but keep the consistent ID
             defaultChannel._id = channel._id;
             defaultChannel.icon = channel.icon || defaultChannel.icon;
           }
         } else if (!allChannels.some(c => c.id === channel._id)) {
-          // This is a custom channel - add it to the list
           allChannels.push({
-            id: channel._id, 
+            id: channel._id,
             name: channel.name,
             icon: channel.icon || '💬',
             isDefaultChannel: channel.isDefaultChannel
           });
         }
       });
-      
+
       console.log('Setting channels:', allChannels);
       setChannels(allChannels);
     } catch (error) {
       console.error('Error fetching channels:', error);
-      // Fall back to default channels
-      console.log('Falling back to default channels:', defaultChannels);
+      toast.error('Failed to load channels');
       setChannels(defaultChannels);
     } finally {
       setLoading(false);
@@ -104,53 +94,55 @@ export const ConversationProvider = ({ children }) => {
   // Function to fetch direct conversations
   const fetchDirectConversations = useCallback(async () => {
     if (!user?.token) return;
-    
+
     try {
       setLoading(true);
-      
-      // Use the correct API endpoint for direct messages
-      // The endpoint is now consolidated in messageRoutes.js
+
       const response = await fetch(`${API_BASE_URL}/messages/direct/conversations`, {
         headers: {
           'Authorization': `Bearer ${user.token}`
         },
         credentials: 'include'
       });
-      
+
       if (!response.ok) {
-        throw new Error('Failed to fetch direct conversations');
+        throw new Error(`Failed to fetch direct conversations: ${response.status} ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       console.log('Fetched direct conversations:', data);
-      
-      // Transform the data into the expected format if needed
-      // The response is now a direct array of conversations
+
       const conversations = Array.isArray(data) ? data : [];
-      
-      // Make sure each conversation has the required fields
-      const formattedConversations = conversations.map(conv => ({
-        _id: conv._id,
-        username: conv.otherUser?.username || 'Unknown',
-        profilePicture: conv.otherUser?.profilePicture || null,
-        status: conv.otherUser?.status || 'offline',
-        unreadCount: conv.unreadCount || 0,
-        lastViewedAt: conv.lastViewedAt
-      }));
-      
+
+      // Add standardConversationId for room joining
+      const formattedConversations = conversations.map(conv => {
+        const otherUserId = conv.otherUser?._id;
+        const sortedIds = [user._id, otherUserId].sort();
+        return {
+          _id: conv._id,
+          userId: otherUserId,
+          username: conv.otherUser?.username || 'Unknown',
+          profilePicture: conv.otherUser?.profilePicture || null,
+          status: conv.otherUser?.status || 'offline',
+          unreadCount: conv.unreadCount || 0,
+          lastViewedAt: conv.lastViewedAt,
+          standardConversationId: `dm_${sortedIds[0]}_${sortedIds[1]}` // Added for room joining
+        };
+      });
+
       setDirectConversations(formattedConversations);
     } catch (error) {
       console.error('Error fetching direct conversations:', error);
-      // If we fail, keep current conversations
+      toast.error('Failed to load direct conversations');
     } finally {
       setLoading(false);
     }
-  }, [user?.token]);
+  }, [user?.token, user?._id]);
 
   // Function to fetch available users
   const fetchUsers = useCallback(async () => {
     if (!user?.token) return;
-    
+
     try {
       console.log('Fetching users...');
       const response = await fetch(`${API_BASE_URL}/users/list`, {
@@ -159,155 +151,106 @@ export const ConversationProvider = ({ children }) => {
         },
         credentials: 'include'
       });
-      
+
       if (!response.ok) {
-        throw new Error('Failed to fetch users');
+        throw new Error(`Failed to fetch users: ${response.status} ${response.statusText}`);
       }
-      
+
       const data = await response.json();
-      
-      // Filter out current user
       const filteredUsers = data.filter(u => u._id !== user._id);
       console.log('Received users data:', filteredUsers);
-      
+
       setUsers(filteredUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
+      toast.error('Failed to load users');
     }
   }, [user]);
 
   // Function to start a direct conversation
   const startDirectConversation = useCallback(async (userId) => {
     if (!user?.token || !userId) return null;
-    
+
     try {
-      // First, check if conversation already exists by user ID
-      // We need to check both the _id and userId fields since we may have stored
-      // conversations in different formats
-      const existingByUserId = directConversations.find(c => 
+      const existing = directConversations.find(c =>
         c.userId === userId ||
-        (c.otherUser && c.otherUser._id === userId)
+        (c.otherUser && c.otherUser._id === userId) ||
+        (c._id && typeof c._id === 'string' && c._id.startsWith('dm_') &&
+          c._id.split('_').slice(1).includes(userId))
       );
-      
-      // Also check if we have a dm_ format conversation that matches this user
-      // This supports the new consistent ID format
-      const existingByDmFormat = directConversations.find(c => {
-        // Check if this is a direct message conversation ID
-        if (c._id && typeof c._id === 'string' && c._id.startsWith('dm_')) {
-          // Extract the user IDs from the dm_ format
-          const parts = c._id.split('_');
-          if (parts.length === 3) {
-            // Check if either user ID matches our target
-            return parts[1] === userId || parts[2] === userId;
-          }
-        }
-        return false;
-      });
-      
-      const existing = existingByUserId || existingByDmFormat;
-      
+
       if (existing) {
         console.log('Using existing conversation:', existing);
-        // Move to top of list if needed by removing and adding back
-        setDirectConversations(prevConversations => {
-          const updatedConversations = [
-            existing, 
-            ...prevConversations.filter(c => c._id !== existing._id)
+        setDirectConversations(prev => {
+          const updated = [
+            existing,
+            ...prev.filter(c => c._id !== existing._id)
           ];
-          
-          // Save to localStorage for persistence
-          localStorage.setItem('openChats', JSON.stringify(updatedConversations));
-          
-          return updatedConversations;
+          localStorage.setItem('openChats', JSON.stringify(updated));
+          return updated;
         });
-        
         return existing;
       }
-      
-      // Try to find an existing direct message conversation or create one
+
       console.log(`Attempting to start conversation with user ID: ${userId}`);
-      
-      // Use the correct API endpoint for messages
+
       const response = await fetch(`${API_BASE_URL}/messages/direct/${userId}`, {
-        method: 'POST', // POST to create a new conversation
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${user.token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          // Instead of a default message, we'll just initiate the conversation
-          // without any starter message
-          startConversation: true
-        }),
+        body: JSON.stringify({ startConversation: true }),
         credentials: 'include'
       });
-      
+
       if (!response.ok) {
-        console.error(`API error: ${response.status} - ${response.statusText}`);
-        throw new Error(`Failed to start conversation: ${response.status}`);
+        throw new Error(`Failed to start conversation: ${response.status} ${response.statusText}`);
       }
-      
+
       const messageData = await response.json();
       console.log('Created new conversation:', messageData);
-      
-      // Extract the conversation ID from the response
-      // The backend creates conversation IDs in format: dm_userId1_userId2
+
       const conversationId = messageData.conversationId || messageData._id;
-      
       if (!conversationId) {
         console.error('No conversation ID in response:', messageData);
         toast.error('Failed to create conversation');
         return null;
       }
-      
-      console.log('Extracted conversation ID:', conversationId);
-      
-      // Use the recipient information to create a conversation object
+
       const otherUser = users.find(u => u._id === userId);
       if (!otherUser) {
         console.error('Could not find user details for:', userId);
         toast.error('Could not find user details');
         return null;
       }
-      
-      // Create a conversation object, handling cases where there's no initial message
+
+      const sortedIds = [user._id, otherUser._id].sort();
       const newConversation = {
-        _id: conversationId, // Use the actual conversation ID from the server
-        userId: userId,       // Store the user ID separately for reference
+        _id: conversationId,
+        userId: userId,
         username: otherUser.username,
         profilePicture: otherUser.profilePicture,
         status: otherUser.status || 'offline',
         unreadCount: 0,
-        // Only set lastMessage if we received a message in the response
-        lastMessage: messageData._id ? messageData : null, 
-        // Store the receiverId for easier message sending
+        lastMessage: messageData._id ? messageData : null,
         receiverId: userId,
-        // Include empty conversation flag to indicate no messages yet
-        emptyConversation: !messageData._id 
+        emptyConversation: !messageData._id,
+        standardConversationId: `dm_${sortedIds[0]}_${sortedIds[1]}` // Added for room joining
       };
-      
-      console.log('Created new conversation object:', newConversation);
-      
-      // Add to state at the beginning of the array (most recent)
-      setDirectConversations(prevConversations => {
-        // Remove any existing conversations with this user or ID
-        const filtered = prevConversations.filter(c => 
-          c._id !== newConversation._id && 
+
+      setDirectConversations(prev => {
+        const filtered = prev.filter(c =>
+          c._id !== newConversation._id &&
           c.userId !== userId &&
           (c.otherUser?._id !== userId)
         );
-        // Add to beginning (most recent)
         const updated = [newConversation, ...filtered];
-        
-        // Save to localStorage for persistence
         localStorage.setItem('openChats', JSON.stringify(updated));
-        
-        // Log the update
-        console.log('Updated direct conversations with new one:', updated);
-        
+        console.log('Updated direct conversations:', updated);
         return updated;
       });
-      
+
       toast.success(`Started conversation with ${otherUser.username}`);
       return newConversation;
     } catch (error) {
@@ -315,20 +258,18 @@ export const ConversationProvider = ({ children }) => {
       toast.error(`Failed to start conversation: ${error.message}`);
       return null;
     }
-  }, [user?.token, directConversations, users]);
+  }, [user?.token, user?._id, directConversations, users]);
 
   // Function to remove a conversation from recent conversations list
-  const removeConversation = useCallback(async (userId) => {
-    if (!userId || !user?.token) return;
-    
-    console.log(`Removing conversation with user ID: ${userId} from recent conversations`);
-    
+  const removeConversation = useCallback(async (conversationId) => {
+    if (!conversationId || !user?.token) return;
+
+    console.log(`Removing conversation with ID: ${conversationId}`);
+
     try {
-      // Log the API call we're making for debugging
-      const url = `${API_BASE_URL}/users/open-chats/${userId}`;
+      const url = `${API_BASE_URL}/users/open-chats/${conversationId}`;
       console.log('Making API call to:', url);
-      
-      // Call API to delete messages for this conversation
+
       const response = await fetch(url, {
         method: 'DELETE',
         headers: {
@@ -337,35 +278,30 @@ export const ConversationProvider = ({ children }) => {
         },
         credentials: 'include'
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Server response:', errorText);
-        throw new Error(`Failed to delete conversation messages: ${response.status} ${response.statusText}`);
+        throw new Error(`Failed to delete conversation: ${response.status} ${response.statusText}`);
       }
-      
-      // Update state
-      setDirectConversations(prevConversations => {
-        // Filter out the conversation to remove
-        const updatedConversations = prevConversations.filter(c => c._id !== userId);
-        
-        // Save to localStorage for persistence
-        localStorage.setItem('openChats', JSON.stringify(updatedConversations));
-        
-        return updatedConversations;
+
+      setDirectConversations(prev => {
+        const updated = prev.filter(c => c._id !== conversationId);
+        localStorage.setItem('openChats', JSON.stringify(updated));
+        return updated;
       });
-      
-      console.log('Successfully deleted conversation and messages');
+
+      console.log('Successfully deleted conversation');
     } catch (error) {
       console.error('Error removing conversation:', error);
-      toast.error('Failed to completely remove conversation');
+      toast.error('Failed to remove conversation');
     }
   }, [user?.token]);
 
   // Function to create a new channel
   const createChannel = useCallback(async (channelName) => {
     if (!user?.token || !channelName.trim()) return null;
-    
+
     try {
       const response = await fetch(`${API_BASE_URL}/conversations`, {
         method: 'POST',
@@ -379,14 +315,13 @@ export const ConversationProvider = ({ children }) => {
         }),
         credentials: 'include'
       });
-      
+
       if (!response.ok) {
-        throw new Error('Failed to create channel');
+        throw new Error(`Failed to create channel: ${response.status} ${response.statusText}`);
       }
-      
+
       const newChannel = await response.json();
-      
-      // Add to state
+
       setChannels(prev => [
         ...prev,
         {
@@ -396,7 +331,7 @@ export const ConversationProvider = ({ children }) => {
           isDefaultChannel: false
         }
       ]);
-      
+
       toast.success('Channel created successfully!');
       return newChannel;
     } catch (error) {
@@ -406,7 +341,7 @@ export const ConversationProvider = ({ children }) => {
     }
   }, [user?.token]);
 
-  // Fetch data when user is logged in and socket is connected
+  // Fetch data when user is logged in
   useEffect(() => {
     const loadData = async () => {
       if (user?.token) {
@@ -415,19 +350,27 @@ export const ConversationProvider = ({ children }) => {
           fetchDirectConversations(),
           fetchUsers()
         ]);
-        
-        // Load open direct conversations from localStorage
+
         try {
           const savedConversations = localStorage.getItem('openChats');
           if (savedConversations) {
             const parsed = JSON.parse(savedConversations);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              console.log('Loaded saved direct conversations from localStorage:', parsed);
+              console.log('Loaded saved conversations:', parsed);
               setDirectConversations(prev => {
-                // Merge with any new conversations fetched from the server
                 const existingIds = new Set(parsed.map(c => c._id));
                 const newOnes = prev.filter(c => !existingIds.has(c._id));
-                return [...parsed, ...newOnes];
+                // Add standardConversationId to saved conversations if missing
+                const updatedParsed = parsed.map(conv => {
+                  if (conv.standardConversationId) return conv;
+                  const otherUserId = conv.userId || conv.otherUser?._id;
+                  const sortedIds = [user._id, otherUserId].sort();
+                  return {
+                    ...conv,
+                    standardConversationId: `dm_${sortedIds[0]}_${sortedIds[1]}`
+                  };
+                });
+                return [...updatedParsed, ...newOnes];
               });
             }
           }
@@ -436,21 +379,18 @@ export const ConversationProvider = ({ children }) => {
         }
       }
     };
-    
+
     loadData();
-  }, [user?.token, fetchChannels, fetchDirectConversations, fetchUsers]);
+  }, [user?.token, fetchChannels, fetchDirectConversations, fetchUsers, user?._id]);
 
   // Set up event listeners for real-time updates
   useEffect(() => {
-    if (!connected) return;
-    
-    // Handler for new conversation notifications
+    if (!socket || !connected) return;
+
     const handleNewConversation = (conversation) => {
       if (conversation.type === 'channel') {
         setChannels(prev => {
-          if (prev.some(c => c.id === conversation._id)) {
-            return prev;
-          }
+          if (prev.some(c => c.id === conversation._id)) return prev;
           return [
             ...prev,
             {
@@ -462,28 +402,33 @@ export const ConversationProvider = ({ children }) => {
           ];
         });
       } else if (conversation.type === 'direct') {
+        const otherUserId = conversation.participants?.find(p => p._id !== user._id)?._id;
+        const sortedIds = [user._id, otherUserId].sort();
+        const formattedConversation = {
+          _id: conversation._id,
+          userId: otherUserId,
+          username: conversation.otherUser?.username || 'Unknown',
+          profilePicture: conversation.otherUser?.profilePicture || null,
+          status: conversation.otherUser?.status || 'offline',
+          standardConversationId: `dm_${sortedIds[0]}_${sortedIds[1]}`
+        };
         setDirectConversations(prev => {
-          if (prev.some(c => c._id === conversation._id)) {
-            return prev;
-          }
-          return [...prev, conversation];
+          if (prev.some(c => c._id === conversation._id)) return prev;
+          return [...prev, formattedConversation];
         });
       }
     };
-    
-    // Handler for receiving the list of online users
+
     const handleOnlineUsers = (onlineUserList) => {
       console.log('Online users received:', onlineUserList);
       if (!Array.isArray(onlineUserList)) return;
-      
+
       setUsers(prev => {
-        // Update status of existing users based on online users list
         const updatedUsers = prev.map(u => {
-          const isOnline = onlineUserList.some(ou => ou.userId === u._id);
-          return isOnline ? { ...u, status: 'online' } : u;
+          const onlineUser = onlineUserList.find(ou => ou.userId === u._id);
+          return onlineUser ? { ...u, status: onlineUser.status } : u;
         });
-        
-        // Add any new online users not already in our list
+
         onlineUserList.forEach(ou => {
           if (!updatedUsers.some(u => u._id === ou.userId) && ou.userId !== user?._id) {
             updatedUsers.push({
@@ -494,27 +439,27 @@ export const ConversationProvider = ({ children }) => {
             });
           }
         });
-        
+
         return updatedUsers;
       });
+
+      setDirectConversations(prev => prev.map(conv => {
+        const onlineUser = onlineUserList.find(ou => ou.userId === conv.userId);
+        return onlineUser ? { ...conv, status: onlineUser.status } : conv;
+      }));
     };
-    
-    // Handler for when a user connects
+
     const handleUserConnected = (data) => {
       console.log('User connected:', data);
       if (!data || !data.userId) return;
-      
+
       setUsers(prev => {
-        // Check if user already exists in our list
         const userExists = prev.some(u => u._id === data.userId);
-        
         if (userExists) {
-          // Update existing user's status
-          return prev.map(u => 
+          return prev.map(u =>
             u._id === data.userId ? { ...u, status: 'online' } : u
           );
         } else if (data.username && data.userId !== user?._id) {
-          // Add new user if not already in the list and not the current user
           return [...prev, {
             _id: data.userId,
             username: data.username,
@@ -524,33 +469,37 @@ export const ConversationProvider = ({ children }) => {
         }
         return prev;
       });
+
+      setDirectConversations(prev => prev.map(conv =>
+        conv.userId === data.userId ? { ...conv, status: 'online' } : conv
+      ));
     };
-    
-    // Handler for when a user disconnects
+
     const handleUserDisconnected = (data) => {
       console.log('User disconnected:', data);
       if (!data || !data.userId) return;
-      
-      setUsers(prev => {
-        return prev.map(u => 
-          u._id === data.userId ? { ...u, status: 'offline' } : u
-        );
-      });
+
+      setUsers(prev => prev.map(u =>
+        u._id === data.userId ? { ...u, status: 'offline' } : u
+      ));
+
+      setDirectConversations(prev => prev.map(conv =>
+        conv.userId === data.userId ? { ...conv, status: 'offline' } : conv
+      ));
     };
-    
-    // Set up event listeners
-    const cleanupFunctions = [
-      onEvent('newConversation', handleNewConversation),
-      onEvent('userConnected', handleUserConnected),
-      onEvent('userDisconnected', handleUserDisconnected),
-      onEvent('onlineUsers', handleOnlineUsers)
-    ];
-    
-    // Return cleanup function
+
+    socket.on('newConversation', handleNewConversation);
+    socket.on('userConnected', handleUserConnected);
+    socket.on('userDisconnected', handleUserDisconnected);
+    socket.on('onlineUsers', handleOnlineUsers);
+
     return () => {
-      cleanupFunctions.forEach(cleanup => cleanup());
+      socket.off('newConversation', handleNewConversation);
+      socket.off('userConnected', handleUserConnected);
+      socket.off('userDisconnected', handleUserDisconnected);
+      socket.off('onlineUsers', handleOnlineUsers);
     };
-  }, [connected, onEvent, user?._id]);
+  }, [socket, connected, user?._id]);
 
   return (
     <ConversationContext.Provider value={{

@@ -63,74 +63,137 @@ const setupSocketIO = (server) => {
         .catch(err => console.error('Error updating user status:', err));
     }
     
-    // Channel message handler
-    socket.on('channelMessage', (data) => {
-      handleChannelMessage(io, socket, data);
-    });
-    
-    // Direct message handler
-    socket.on('directMessage', (data) => {
-      // Only log meaningful messages, not test messages
-      if (!data.content.includes('not sendinding properly') && 
-          !data.content.includes('msg not visible')) {
-        console.log('Received direct message:', data);
-      }
-      const { content, receiverId, tempId, _id } = data;
+    const handleSocketEvents = (io, socket) => {
+      console.log(`User connected: ${socket.user.username}`);
       
-      // Find the sender from connectedUsers using socket.id
-      const sender = { id: socket.id, username: socket.user.username };
-      if (!sender) return;
+      // Join user to their personal room for direct messaging
+      socket.join(socket.user._id.toString());
+      console.log(`[CONNECTION] User ${socket.user.username} joined personal room ${socket.user._id.toString()}`);
       
-      // Find the receiver either by username or id in the connectedUsers map
-      let receiver = null;
-      for (const [userId, userInfo] of connectedUsers.entries()) {
-        if (userInfo.username === receiverId || userId === receiverId) {
-          receiver = { id: userInfo.socketId, username: userInfo.username };
-          break;
+      // Standard events
+      socket.on('join_room', (room) => {
+        if (!room) {
+          console.error(`[JOIN] Invalid room name: ${room}`);
+          return;
         }
-      }
+        socket.join(room);
+        console.log(`[JOIN] User ${socket.user.username} joined room ${room}`);
+      });
       
-      if (receiver) {
-        // Create a consistent message ID from tempId or generate a new one
-        const messageId = tempId || `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        
-        // Use a consistent message structure with both _id and id fields
-        const message = { 
-          _id: messageId, // Include _id for React components
-          id: messageId,  // Include id for backward compatibility
-          content, 
-          sender: { 
-            _id: socket.user._id, // Include user IDs
-            username: sender.username 
-          }, 
-          receiver: { 
-            _id: receiverId, // Include receiver ID
-            username: receiver.username 
-          }, 
-          timestamp: new Date(),
-          tempId: tempId // Pass back the original tempId for matching
-        };
-        
-        // Add a special field to mark the message's origin - helps with deduplication
-        const receiverMessage = { ...message };
-        const senderMessage = { ...message, fromSelf: true };
-        
-        // Send to receiver
-        io.to(receiver.id).emit('directMessage', receiverMessage);
-        
-        // When sending back to the sender, mark it with 'fromSelf: true'
-        // This will help the client avoid duplicates
-        socket.emit('directMessageConfirmation', senderMessage);
-        
-        console.log('Sent DM to:', receiver.id);
-      } else {
-        console.error('Receiver not found:', receiverId);
-        
-        // Still process with the regular handler for database storage
-        // even if we couldn't find a direct socket
-        handleDirectMessage(io, socket, data);
-      }
-    });
+      socket.on('leave_room', (room) => {
+        if (!room) {
+          console.error(`[LEAVE] Invalid room name: ${room}`);
+          return;
+        }
+        socket.leave(room);
+        console.log(`[LEAVE] User ${socket.user.username} left room ${room}`);
+      });
+      
+      // Debug helper to check which rooms this socket is in
+      socket.on('getRooms', () => {
+        const socketRooms = Array.from(socket.rooms.values());
+        console.log(`[ROOMS] User ${socket.user.username} is in rooms:`, socketRooms);
+        socket.emit('roomsList', { rooms: socketRooms });
+      });
+      
+      // Direct messaging
+      socket.on('directMessage', async (data) => {
+        try {
+          console.log('Received direct message:', data);
+          
+          // Validate required fields
+          if (!data.content || !data.receiverId) {
+            socket.emit('messageError', { error: 'Missing required fields for direct message' });
+            return;
+          }
+          
+          // Add sender information to the data
+          data.senderId = socket.user._id;
+          data.senderUsername = socket.user.username;
+          
+          // Broadcast message to interested parties
+          const message = await handleDirectMessage(io, socket, data);
+          
+          // If the message was successfully processed, confirm to the sender
+          if (message) {
+            socket.emit('directMessageConfirmation', { 
+              success: true, 
+              messageId: message._id,
+              tempId: data.tempId,
+              timestamp: new Date().toISOString()
+            });
+          }
+        } catch (error) {
+          console.error('[DIRECT MESSAGE] Error processing message:', error);
+          socket.emit('messageError', { 
+            error: 'Failed to process direct message', 
+            tempId: data.tempId,
+            details: error.message 
+          });
+        }
+      });
+      
+      // Chat room messaging
+      socket.on('channelMessage', async (data) => {
+        try {
+          console.log(`Channel message from ${socket.user.username}`, data);
+          const message = await handleChannelMessage(io, socket, data);
+          
+          if (message) {
+            socket.emit('messageConfirmation', { 
+              success: true, 
+              messageId: message._id, 
+              tempId: data.tempId,
+              channel: data.channel,
+              timestamp: new Date().toISOString()
+            });
+          }
+        } catch (error) {
+          console.error(`Error handling channel message: ${error.message}`);
+          socket.emit('messageError', { 
+            error: 'Failed to send channel message', 
+            channel: data.channel,
+            tempId: data.tempId
+          });
+        }
+      });
+      
+      // Message loading
+      socket.on('loadInitialMessages', async (data) => {
+        try {
+          await loadInitialMessages(io, socket, data);
+        } catch (error) {
+          console.error(`Error loading initial messages: ${error.message}`);
+          socket.emit('loadInitialMessages', { 
+            error: 'Failed to load messages',
+            details: error.message
+          });
+        }
+      });
+      
+      // Other events
+      socket.on('typing', (data) => {
+        if (!data || !data.room) return;
+        socket.to(data.room).emit('typing', {
+          username: socket.user.username,
+          userId: socket.user._id
+        });
+      });
+      
+      socket.on('stopTyping', (data) => {
+        if (!data || !data.room) return;
+        socket.to(data.room).emit('stopTyping', {
+          username: socket.user.username,
+          userId: socket.user._id
+        });
+      });
+      
+      socket.on('disconnect', () => {
+        console.log(`User disconnected: ${socket.user.username}`);
+      });
+    };
+    
+    handleSocketEvents(io, socket);
     
     // Load initial messages
     socket.on('loadInitialMessages', (data) => {

@@ -51,11 +51,22 @@ const broadcastMessage = (io, roomIds, message, type, tempId = null) => {
   // Ensure roomIds is an array
   const rooms = Array.isArray(roomIds) ? roomIds : [roomIds];
   
-  console.log(`[BROADCAST] Broadcasting ${type} message to rooms:`, rooms);
+  // Update room names for channels to use a prefix
+  const updatedRooms = rooms.map(room => {
+    if (type === 'channel' && !room.startsWith('channel_')) {
+      return `channel_${room}`;
+    }
+    return room;
+  });
+
+  console.log(`[BROADCAST] Broadcasting ${type} message to rooms:`, updatedRooms);
   console.log(`[BROADCAST] Message has tempId: ${tempId || 'none'}`);
   
+  // Define event name once for all broadcast methods
+  const eventName = type === 'channel' ? 'channelMessage' : 'directMessage';
+  
   // Enhanced broadcasting with multiple mechanisms for reliability
-  rooms.forEach(roomId => {
+  updatedRooms.forEach(roomId => {
     if (!roomId) {
       console.error('[BROADCAST] Cannot broadcast to undefined room');
       return;
@@ -69,58 +80,44 @@ const broadcastMessage = (io, roomIds, message, type, tempId = null) => {
     console.log(`[BROADCAST] Room ${roomName} has ${clientCount} connected clients`);
     
     // BROADCAST METHOD 1: Standard room broadcasting
-    // Use the unified messageReceived event
     io.to(roomName).emit('messageReceived', {
       type,
       message: transformedMessage
     });
     
     // Also send the specific event type for backward compatibility
-    const eventName = type === 'channel' ? 'channelMessage' : 'directMessage';
     io.to(roomName).emit(eventName, transformedMessage);
   });
   
   // BROADCAST METHOD 2: For direct messages, ensure sender and receiver get the message
   if (type === 'direct' && message.sender && message.receiver) {
-    // Get sender and receiver IDs
     const senderId = message.sender._id.toString();
     const receiverId = message.receiver._id.toString();
     
     console.log(`[BROADCAST] Direct message from ${senderId} to ${receiverId}`);
     
-    // Use the special namespaced direct message event for targeted delivery
     io.to(senderId).emit('directMessageTo:' + receiverId, transformedMessage);
     io.to(receiverId).emit('directMessageFrom:' + senderId, transformedMessage);
     
     // BROADCAST METHOD 3: Try to find and emit directly to all sockets of both users
     const allSockets = Array.from(io.sockets.sockets.values());
     
-    // Find all sockets for both users
     const senderSockets = allSockets.filter(s => s.user && s.user._id.toString() === senderId);
     const receiverSockets = allSockets.filter(s => s.user && s.user._id.toString() === receiverId);
     
     console.log(`[BROADCAST] Found ${senderSockets.length} sender sockets and ${receiverSockets.length} receiver sockets`);
     
-    // Emit to all sender sockets
     senderSockets.forEach(socket => {
-      socket.emit('messageReceived', {
-        type,
-        message: transformedMessage
-      });
+      socket.emit('messageReceived', { type, message: transformedMessage });
       socket.emit(eventName, transformedMessage);
     });
     
-    // Emit to all receiver sockets
     receiverSockets.forEach(socket => {
-      socket.emit('messageReceived', {
-        type,
-        message: transformedMessage
-      });
+      socket.emit('messageReceived', { type, message: transformedMessage });
       socket.emit(eventName, transformedMessage);
     });
     
     // BROADCAST METHOD 4: Broadcast to all clients as a last resort (but only for direct messages)
-    // This is not ideal but ensures delivery at the expense of unnecessarily notifying other users
     console.log(`[BROADCAST] Using fallback global broadcast for direct message reliability`);
     io.emit('globalDirectMessage', {
       type,
@@ -144,23 +141,19 @@ const handleChannelMessage = async (io, socket, data) => {
     
     console.log(`[CHANNEL] Processing message for channel: ${channel}`, data);
     
-    // Always standardize channel names to lowercase and handle dash vs space conversion
     let channelName = channel ? channel.toLowerCase() : null;
     
-    // Support both "tech-talk" and "tech talk" formats
     if (channelName === 'tech talk') channelName = 'tech-talk';
-    if (channelName === 'tech') channelName = 'tech-talk';  // Legacy support
+    if (channelName === 'tech') channelName = 'tech-talk';
 
     console.log(`User ${socket.user.username} sent channel message to ${channelName}:`, content);
     
-    // Validate channel
     if (!channelName) {
       console.error(`[CHANNEL] No channel name provided`);
       socket.emit('messageError', { error: 'Channel name is required' });
       return;
     }
     
-    // Check against VALID_CHANNELS with more detailed logging
     console.log(`[CHANNEL] Validating channel "${channelName}" against:`, VALID_CHANNELS);
     if (!VALID_CHANNELS.includes(channelName)) {
       console.error(`[CHANNEL] Invalid channel name: ${channelName}`);
@@ -170,13 +163,11 @@ const handleChannelMessage = async (io, socket, data) => {
 
     console.log(`[CHANNEL] Message in ${channelName} from ${socket.user.username}`);
 
-    // Find the channel conversation
     let conversation = await Conversation.findOne({ 
       name: channelName,
       type: 'channel'
     });
 
-    // If channel doesn't exist, create it (unlikely, but as a fallback)
     if (!conversation) {
       console.log(`[CHANNEL] Creating new channel: ${channelName}`);
       conversation = await Conversation.create({
@@ -188,7 +179,6 @@ const handleChannelMessage = async (io, socket, data) => {
       });
     }
 
-    // Create and save the channel message
     const message = new Message({
       sender: socket.user._id,
       content,
@@ -198,15 +188,12 @@ const handleChannelMessage = async (io, socket, data) => {
     await message.save();
     await message.populate('sender', 'username profilePicture status');
 
-    // Update channel's lastActivity
     conversation.lastActivity = new Date();
     await conversation.save();
 
-    // Broadcast message to everyone in the channel - pass along the tempId
     return broadcastMessage(io, channelName, message, 'channel', tempId);
   } catch (error) {
     console.error('[CHANNEL] Error handling channel message:', error);
-    console.error('[CHANNEL] Error details:', error.stack);
     socket.emit('messageError', { error: 'Failed to send channel message' });
     throw error;
   }
@@ -214,10 +201,14 @@ const handleChannelMessage = async (io, socket, data) => {
 
 const handleDirectMessage = async (io, socket, data) => {
   try {
-    const { content, receiverId, tempId, conversationId } = data;
+    const { content, receiverId, tempId, conversationId, standardRoomId } = data;
     const senderId = socket.user._id;
 
-    console.log(`[DIRECT MESSAGE] Handling direct message from ${socket.user.username} to ${receiverId}, conversationId: ${conversationId || 'not provided'}`);
+    console.log(`[DIRECT MESSAGE] Handling direct message from ${socket.user.username} to ${receiverId}`, {
+      conversationId: conversationId || 'not provided',
+      standardRoomId: standardRoomId || 'not provided',
+      tempId: tempId || 'not provided'
+    });
 
     if (!receiverId) {
       console.error('[DIRECT MESSAGE] No receiverId provided');
@@ -225,10 +216,8 @@ const handleDirectMessage = async (io, socket, data) => {
       return null;
     }
 
-    // Find or create the conversation between the users
     const conversation = await Conversation.findOrCreateDirectConversation(senderId, receiverId);
     
-    // Create message with explicit ID handling
     const messageId = new mongoose.Types.ObjectId();
     console.log('[DIRECT MESSAGE] Generated new message ID:', messageId.toString());
     
@@ -239,88 +228,77 @@ const handleDirectMessage = async (io, socket, data) => {
       content,
       messageType: 'direct',
       conversationId: conversation._id,
-      tempId // Store tempId for client reconciliation
+      tempId
     });
     
-    // Save and populate the message
     await message.save();
     await message.populate('sender', 'username profilePicture status');
     await message.populate('receiver', 'username profilePicture status');
     
-    // Log complete message details
     console.log('[DIRECT MESSAGE] Saved message:', {
-      _id: message._id.toString(),
+      _id: message._id?.toString() || 'unknown',
       tempId,
-      sender: message.sender.username,
-      receiver: message.receiver.username,
-      conversationId: message.conversationId.toString()
+      sender: message.sender?.username || 'unknown',
+      receiver: message.receiver?.username || 'unknown',
+      conversationId: message.conversationId?.toString() || 'unknown'
     });
 
-    // Update users' conversations
     const [sender, receiver] = await Promise.all([
       User.findById(senderId),
       User.findById(receiverId)
     ]);
 
-    // Add conversation to users and update unread count
-    await sender.addConversation(conversation._id);
-    await receiver.addConversation(conversation._id);
-    await receiver.incrementUnreadCount(conversation._id);
+    if (sender) await sender.addConversation(conversation._id);
+    if (receiver) await receiver.addConversation(conversation._id);
+    if (receiver) await receiver.incrementUnreadCount(conversation._id);
 
-    // Update conversation's lastActivity
     conversation.lastActivity = new Date();
     await conversation.save();
 
-    // Convert message to JSON with all necessary properties
     const messageJson = message.toObject();
-    
-    // Ensure all IDs are properly set
     messageJson._id = message._id;
     messageJson.conversationId = conversation._id;
-    messageJson.tempId = tempId; // Keep tempId for client reconciliation
+    messageJson.tempId = tempId;
     
-    // Log broadcast details
     console.log('[DIRECT MESSAGE] Broadcasting message:', {
-      _id: messageJson._id.toString(),
+      _id: messageJson._id?.toString() || 'unknown',
       tempId: messageJson.tempId,
-      conversationId: messageJson.conversationId.toString(),
-      sender: messageJson.sender.username,
-      receiver: messageJson.receiver.username,
+      conversationId: messageJson.conversationId?.toString() || 'unknown',
+      sender: messageJson.sender?.username || 'unknown',
+      receiver: messageJson.receiver?.username || 'unknown',
       contentPreview: content.substring(0, 20) + (content.length > 20 ? '...' : '')
     });
+
+    const conversationIdStr = conversation._id?.toString() || '';
+    const senderIdStr = senderId?.toString() || '';
+    const receiverIdStr = receiverId?.toString() || '';
     
-    // Add conversation ID to message for better routing
-    const conversationStr = conversation._id.toString();
-    messageJson.conversationId = conversationStr;
+    const sortedIds = [senderIdStr, receiverIdStr].filter(Boolean).sort();
+    const conversationRoomId = standardRoomId || 
+      (sortedIds.length === 2 ? 
+        `dm_${sortedIds[0]}_${sortedIds[1]}` : 
+        `dm_${senderIdStr}_${receiverIdStr}`);
     
-    // Create a standard conversation room ID format
-    const sortedIds = [senderId.toString(), receiverId.toString()].sort();
-    const conversationRoomId = `dm_${sortedIds[0]}_${sortedIds[1]}`;
-    
-    // Define all rooms where this message should be broadcast
     const rooms = [
-      senderId.toString(),         // Sender's user room
-      receiverId.toString(),       // Receiver's user room
-      conversationStr,             // Database conversation ID
-      conversationRoomId           // Standardized conversation room
-    ];
+      senderIdStr,
+      receiverIdStr,
+      conversationIdStr,
+      conversationRoomId
+    ].filter(Boolean); // Filter out any empty strings
     
     console.log(`[DIRECT MESSAGE] Broadcasting to multiple rooms for reliability: ${rooms.join(', ')}`);
     
-    // Use the unified broadcast function for reliable delivery
-    // This handles all broadcasting strategies including direct socket emission and global fallback
     const transformedMessage = broadcastMessage(io, rooms, message, 'direct', tempId);
     
-    // Log which rooms received this message
     console.log(`[DIRECT MESSAGE] Message ${messageJson._id} broadcast complete to all possible rooms`);
     
-    // Return the message including the conversation ID for reference
-    transformedMessage.conversationId = conversationStr;
+    if (transformedMessage) {
+      transformedMessage.conversationId = conversationIdStr;
+    }
     
     return transformedMessage;
   } catch (error) {
     console.error('[DIRECT MESSAGE] Error handling direct message:', error);
-    console.error('[DIRECT MESSAGE] Error details:', error.stack);
     socket.emit('messageError', { error: 'Failed to send direct message' });
     throw error;
   }
@@ -336,7 +314,6 @@ const handleMessageDeletion = async (io, socket, data) => {
 
     console.log(`[DELETE] Processing delete request for message ${messageId} from user ${socket.user._id}`);
     
-    // Find the message
     const message = await Message.findById(messageId)
       .populate('sender', 'username')
       .populate('receiver', 'username');
@@ -347,27 +324,22 @@ const handleMessageDeletion = async (io, socket, data) => {
       return null;
     }
     
-    // Check if the user is authorized to delete this message
     if (message.sender._id.toString() !== socket.user._id.toString()) {
       console.error(`[DELETE] User ${socket.user._id} not authorized to delete message ${messageId}`);
       socket.emit('messageError', { error: 'Not authorized to delete this message' });
       return null;
     }
     
-    // Mark message as deleted rather than physically deleting it
     message.isDeleted = true;
     message.content = "This message has been deleted";
     await message.save();
     
     console.log(`[DELETE] Message ${messageId} marked as deleted`);
     
-    // Broadcast deletion event
     if (message.channel && VALID_CHANNELS.includes(message.channel)) {
-      // Channel message - broadcast to everyone in the channel
       console.log(`[DELETE] Broadcasting deletion to channel ${message.channel}`);
-      io.to(message.channel).emit('messageDeleted', { messageId });
+      io.to(`channel_${message.channel}`).emit('messageDeleted', { messageId });
     } else {
-      // Direct message - send to both participants
       const senderId = message.sender._id.toString();
       const receiverId = message.receiver._id.toString();
       
@@ -379,13 +351,11 @@ const handleMessageDeletion = async (io, socket, data) => {
     return { success: true, messageId };
   } catch (error) {
     console.error('[DELETE] Error handling message deletion:', error);
-    console.error('[DELETE] Error details:', error.stack);
     socket.emit('messageError', { error: 'Failed to delete message' });
     return null;
   }
 };
 
-// Request tracking for throttling
 const requestTracker = {
   requests: {},
   isThrottled(key) {
@@ -393,30 +363,56 @@ const requestTracker = {
     const request = this.requests[key] || { count: 0, lastTime: 0 };
     const timeWindow = now - request.lastTime;
     
-    // Allow 3 requests per 5 seconds
-    if (timeWindow < 5000 && request.count >= 3) {
+    // Allow more requests in a short time (10 in 2 seconds instead of 3 in 5 seconds)
+    if (timeWindow < 2000 && request.count >= 10) {
+      console.warn(`[THROTTLE] Request ${key} throttled: ${request.count} requests in ${timeWindow}ms`);
       return true;
     }
     
-    this.requests[key] = {
-      count: request.count + 1,
-      lastTime: now
-    };
+    // Reset counter if it's been more than 3 seconds
+    if (timeWindow > 3000) {
+      this.requests[key] = {
+        count: 1,
+        lastTime: now
+      };
+    } else {
+      // Otherwise just increment the counter
+      this.requests[key] = {
+        count: request.count + 1,
+        lastTime: now
+      };
+    }
     return false;
+  },
+  
+  // Add method to clear stale trackers
+  cleanup() {
+    const now = Date.now();
+    Object.keys(this.requests).forEach(key => {
+      if (now - this.requests[key].lastTime > 60000) { // Remove after 1 minute of inactivity
+        delete this.requests[key];
+      }
+    });
   }
 };
+
+// Run cleanup periodically
+setInterval(() => requestTracker.cleanup(), 60000);
 
 const loadInitialMessages = async (io, socket, data) => {
   try {
     const { id, channel, type, limit = 50 } = data;
     
-    // Track requests to prevent loops
     const requestKey = `${socket.id}:${type}:${id || channel}`;
     if (requestTracker.isThrottled(requestKey)) {
       console.warn(`[THROTTLE] Too many requests for ${requestKey}`);
       socket.emit('loadInitialMessages', {
         error: 'Too many requests. Please wait a few seconds.',
-        throttled: true
+        throttled: true,
+        messages: [], // Add empty messages array to avoid frontend errors
+        type: type,
+        conversationId: id,
+        channel: channel
       });
       return;
     }
@@ -426,7 +422,6 @@ const loadInitialMessages = async (io, socket, data) => {
       user: socket.user.username
     });
     
-    // Use either id or channel parameter (for backward compatibility)
     let conversationId = id || channel;
     
     if (!conversationId) {
@@ -435,10 +430,8 @@ const loadInitialMessages = async (io, socket, data) => {
       return;
     }
     
-    // Join the room for this conversation if not already joined
     if (type === 'channel') {
-      const roomName = conversationId.toString().toLowerCase();
-      // Check if socket is in the room using Socket.IO's built-in method
+      const roomName = `channel_${conversationId.toString().toLowerCase()}`;
       const rooms = Array.from(socket.rooms || []);
       const alreadyInRoom = rooms.includes(roomName);
       
@@ -448,14 +441,11 @@ const loadInitialMessages = async (io, socket, data) => {
       }
     }
     
-    // Handle standard public channels by name (like 'general', 'tech-talk', etc.)
     if (type === 'channel') {
-      // Standard channel - use lowercase name
       const channelName = conversationId.toLowerCase();
       console.log(`[LOAD] Loading messages for channel: ${channelName}`);
       
       try {
-        // Use the static method for getting channel messages
         const messages = await Message.getChannelMessages(channelName, Number(limit));
         if (!messages) {
           console.error(`[LOAD] No messages found for channel: ${channelName}`);
@@ -469,8 +459,7 @@ const loadInitialMessages = async (io, socket, data) => {
         
         console.log(`[LOAD] Found ${messages.length} channel messages`);
         
-        // Transform and send messages - important to pass the correct event name
-        const transformedMessages = messages.map(transformMessage).reverse(); // Reverse to get chronological order
+        const transformedMessages = messages.map(transformMessage).reverse();
         console.log(`[LOAD] Emitting ${transformedMessages.length} channel messages for ${channelName}`);
         socket.emit('loadInitialMessages', {
           channel: channelName,
@@ -489,28 +478,10 @@ const loadInitialMessages = async (io, socket, data) => {
         });
         return;
       }
-      
-      console.log(`[LOAD] Found ${messages.length} channel messages`);
-      
-      // Transform and send messages - important to pass the correct event name
-      const transformedMessages = messages.map(transformMessage).reverse(); // Reverse to get chronological order
-      console.log(`[LOAD] Emitting ${transformedMessages.length} channel messages for ${channelName}`);
-      socket.emit('loadInitialMessages', {
-        channel: channelName,
-        messages: transformedMessages,
-        type: 'channel',
-        timestamp: new Date().toISOString()
-      });
-      
-      return transformedMessages;
     } else if (type === 'direct') {
-      // It's a direct message conversation
       try {
-        // Validate if the ID is a valid ObjectId (for DB lookup)
         try {
-          // Store original value for response
           const originalId = conversationId;
-          // Validate ObjectId format
           if (!mongoose.Types.ObjectId.isValid(conversationId)) {
             throw new Error('Invalid conversation ID format');
           }
@@ -525,14 +496,12 @@ const loadInitialMessages = async (io, socket, data) => {
           }
           
           if (conversation.type === 'direct') {
-            // Get the participants
             const participants = conversation.participants;
             if (!participants || participants.length !== 2) {
               throw new Error('Invalid direct conversation participants');
             }
             
             try {
-              // Load direct messages using the static method
               const messages = await Message.getDirectMessages(
                 participants[0],
                 participants[1],
@@ -551,7 +520,6 @@ const loadInitialMessages = async (io, socket, data) => {
               
               console.log(`[LOAD] Found ${messages.length} direct messages`);
               
-              // Transform and send messages
               const transformedMessages = messages.map(transformMessage);
               console.log(`[LOAD] Emitting ${transformedMessages.length} direct messages for conversation ${originalId}`);
               socket.emit('loadInitialMessages', {
@@ -571,18 +539,6 @@ const loadInitialMessages = async (io, socket, data) => {
               });
               return;
             }
-            
-            // Transform and send messages
-            const transformedMessages = messages.map(transformMessage);
-            console.log(`[LOAD] Emitting ${transformedMessages.length} direct messages for conversation ${originalId}`);
-            socket.emit('loadInitialMessages', {
-              conversationId: originalId,
-              messages: transformedMessages,
-              type: 'direct',
-              timestamp: new Date().toISOString()
-            });
-            
-            return transformedMessages;
           } else {
             console.error(`[LOAD] Found conversation but it's not a direct type: ${conversation.type}`);
             socket.emit('error', { message: 'Invalid conversation type' });
@@ -612,41 +568,27 @@ const loadInitialMessages = async (io, socket, data) => {
 
 const handleConnection = async (io, socket, connectedUsers) => {
   try {
-    // Update user status to online
     await User.findByIdAndUpdate(socket.user._id, {
       status: 'online',
       lastSeen: new Date()
     });
     
-    // Join rooms for all valid channels
-    for (const channel of VALID_CHANNELS) {
-      socket.join(channel);
-      console.log(`[CONNECTION] User ${socket.user.username} joined channel ${channel}`);
-    }
-    
-    // Join a room with the user's ID for direct messaging
     socket.join(socket.user._id.toString());
     console.log(`[CONNECTION] User ${socket.user.username} joined personal room ${socket.user._id}`);
     
-    // Find all conversations for this user
     const user = await User.findById(socket.user._id).populate('conversations.conversationId');
     
-    // Join rooms for all direct message conversations using multiple room formats
     for (const conv of user.conversations) {
       if (conv.conversationId && conv.conversationId.type === 'direct') {
-        // STRATEGY 1: Join using MongoDB conversation ID
         const conversationId = conv.conversationId._id.toString();
         socket.join(conversationId);
         console.log(`[CONNECTION] User ${socket.user.username} joined conversation room ${conversationId}`);
         
-        // STRATEGY 2: Join using unified conversation ID format
-        // Find other participant
         const otherParticipant = conv.conversationId.participants.find(
           p => p.toString() !== socket.user._id.toString()
         );
         
         if (otherParticipant) {
-          // Create standardized room ID with sorted user IDs
           const sortedIds = [socket.user._id.toString(), otherParticipant.toString()].sort();
           const conversationRoomId = `dm_${sortedIds[0]}_${sortedIds[1]}`;
           socket.join(conversationRoomId);
@@ -655,14 +597,12 @@ const handleConnection = async (io, socket, connectedUsers) => {
       }
     }
     
-    // Notify others that user is online
     socket.broadcast.emit('userConnected', {
       userId: socket.user._id,
       username: socket.user.username,
       status: 'online'
     });
     
-    // Send online users to the newly connected user
     const onlineUsers = Array.from(connectedUsers.keys()).map(userId => ({
       userId,
       username: connectedUsers.get(userId).username,
@@ -671,10 +611,20 @@ const handleConnection = async (io, socket, connectedUsers) => {
     
     socket.emit('onlineUsers', onlineUsers);
     
+    // Add handlers for dynamic room joining
+    socket.on('join_room', (room) => {
+      socket.join(room);
+      console.log(`[JOIN] User ${socket.user.username} joined room ${room}`);
+    });
+
+    socket.on('leave_room', (room) => {
+      socket.leave(room);
+      console.log(`[LEAVE] User ${socket.user.username} left room ${room}`);
+    });
+    
     return true;
   } catch (error) {
     console.error('[CONNECTION] Error handling connection:', error);
-    console.error('[CONNECTION] Error details:', error.stack);
     return false;
   }
 };
@@ -683,16 +633,13 @@ const handleDisconnect = async (io, socket, connectedUsers) => {
   try {
     const userId = socket.user._id.toString();
     
-    // Remove user from connected users
     connectedUsers.delete(userId);
     
-    // Update user status to offline
     await User.findByIdAndUpdate(userId, { 
       status: 'offline',
       lastSeen: new Date()
     });
     
-    // Notify other users
     io.emit('userDisconnected', { 
       userId,
       username: socket.user.username,
@@ -702,7 +649,6 @@ const handleDisconnect = async (io, socket, connectedUsers) => {
     console.log(`[DISCONNECT] User disconnected: ${socket.user.username} (${userId})`);
   } catch (error) {
     console.error('[DISCONNECT] Error handling disconnect:', error);
-    console.error('[DISCONNECT] Error details:', error.stack);
   }
 };
 

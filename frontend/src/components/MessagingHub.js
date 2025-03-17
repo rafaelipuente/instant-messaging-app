@@ -15,17 +15,19 @@ import '../styles/MessagingHub.css';
 
 const MessagingHub = () => {
   const { user } = useAuth();
-  const { connected } = useSocket();
+  const { socket, connected } = useSocket(); // Access socket instance
   const navigate = useNavigate();
   const [message, setMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeToggle, setActiveToggle] = useState('channels');
   const [showUserList, setShowUserList] = useState(false);
   const [showOpenChats, setShowOpenChats] = useState(true);
-  // const [displayRecentDMs] = useState(true); // Removed unused variable
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  
+  const previousRoomRef = useRef(null);
+  // Track last conversation switch time to prevent rapid switching
+  const lastSwitchTimeRef = useRef(0); // Track previous room for leaving
+
   // Get data from contexts
   const {
     messages,
@@ -42,21 +44,20 @@ const MessagingHub = () => {
     setActiveConversation,
     setConversationType
   } = useMessages();
-  
+
   const {
     channels,
     directConversations,
     users,
-    // loading: conversationsLoading, // Removed unused variable
     startDirectConversation,
     removeConversation
   } = useConversations();
-  
+
   // Function to scroll to bottom of messages
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
-  
+
   // Initialize with default channel
   useEffect(() => {
     if (!activeConversation && channels.length > 0) {
@@ -70,7 +71,6 @@ const MessagingHub = () => {
       
       console.log('Selected default channel:', defaultChannel);
       
-      // Ensure the channel has the expected properties
       if (!defaultChannel || (!defaultChannel.id && !defaultChannel.name)) {
         console.error('Invalid default channel:', defaultChannel);
         return;
@@ -79,8 +79,16 @@ const MessagingHub = () => {
       setActiveConversation(defaultChannel);
       setConversationType('channel');
       loadMessages(defaultChannel, 'channel');
+      
+      // Join default channel room
+      if (socket) {
+        const channelId = defaultChannel.id || defaultChannel.name;
+        socket.emit('join_room', `channel_${channelId}`);
+        previousRoomRef.current = channelId;
+        console.log(`Joined default room: channel_${channelId}`);
+      }
     }
-  }, [channels, activeConversation, setActiveConversation, setConversationType, loadMessages]);
+  }, [channels, activeConversation, setActiveConversation, setConversationType, loadMessages, socket]);
 
   // Debug channels and users - only log once when data changes
   useEffect(() => {
@@ -97,7 +105,7 @@ const MessagingHub = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
-  
+
   // Function to switch to a channel
   const handleChannelSelect = (channel) => {
     if (!channel) {
@@ -105,38 +113,39 @@ const MessagingHub = () => {
       return;
     }
     
+    // Prevent rapid channel switching - throttle to one switch per second
+    const now = Date.now();
+    if (now - lastSwitchTimeRef.current < 1000) {
+      console.log('Throttling channel switch - too rapid');
+      return;
+    }
+    lastSwitchTimeRef.current = now;
+    
     console.log('Selecting channel:', {
       id: channel.id, 
       name: channel.name, 
       type: typeof channel === 'string' ? 'string' : 'object'
     });
     
-    // Ensure we have a valid channel object before proceeding
+    setMessages([]); // Clear messages before loading new ones
+    
+    let channelId = channel.id || channel.name;
     if (typeof channel === 'string') {
-      // If a string was passed, find the matching channel object
-      // First try to match by ID (which should be the channel name from database)
       let matchingChannel = channels.find(c => c.id === channel);
-      
-      // If not found, try by display name (case-insensitive)
       if (!matchingChannel) {
         matchingChannel = channels.find(c => 
           c.name.toLowerCase() === channel.toLowerCase()
         );
       }
-      
-      // If still not found, check if any channel ID contains this string
-      // This helps with hyphenated names like 'tech-talk'
       if (!matchingChannel) {
         matchingChannel = channels.find(c => 
           c.id && c.id.includes(channel)
         );
       }
-      
       if (matchingChannel) {
         channel = matchingChannel;
+        channelId = channel.id || channel.name;
       } else {
-        console.error(`Could not find channel object for name/id: ${channel}`);
-        // Create a temporary channel object - use the string as both ID and name
         channel = { id: channel, name: channel };
       }
     }
@@ -145,110 +154,134 @@ const MessagingHub = () => {
     setActiveConversation(channel);
     setConversationType('channel');
     
-    // Ensure we're passing the correct channel identifier
-    // For consistent channel handling, prefer to use the ID (which should be
-    // the channel name in the database) over the name (which is for display)
-    const channelId = channel.id || channel.name || (typeof channel === 'string' ? channel : null);
-    if (!channelId) {
-      console.error('Invalid channel selected, missing identifier:', channel);
-      return;
+    const roomId = `channel_${channelId}`;
+    if (previousRoomRef.current && socket) {
+      socket.emit('leave_room', `channel_${previousRoomRef.current}`);
+      console.log(`Left room: channel_${previousRoomRef.current}`);
     }
-    
-    console.log(`Loading messages for channel [${channelId}]`);
-    loadMessages(channelId, 'channel');
+    if (socket) {
+      socket.emit('join_room', roomId);
+      console.log(`Joined room: ${roomId}`);
+    }
+    previousRoomRef.current = channelId;
+
+    // Delay loading messages slightly to avoid rapid concurrent requests
+    setTimeout(() => {
+      loadMessages(channelId, 'channel');
+    }, 100);
     markAsRead(channelId);
     setShowUserList(false);
   };
   
-  // Function to switch to a direct message conversation
+  // Function to handle selecting a direct message conversation
   const handleDirectMessageSelect = (conversation) => {
-    console.log('Selecting direct conversation with:', conversation);
-    
-    // Make sure we have a properly formatted conversation object with all required fields
-    const formattedConversation = {
-      ...conversation,
-      _id: conversation._id || conversation.userId, // Ensure _id is set
-      userId: conversation.userId || conversation._id, // Ensure userId is set
-      username: conversation.username || 'Unknown User'
-    };
-    
-    // Generate a standard conversation ID that will be the same for both users
-    if (user && user._id && formattedConversation.userId) {
-      // Create a sorted DM conversation ID for consistency
-      const sortedIds = [user._id.toString(), formattedConversation.userId.toString()].sort();
-      const standardConversationId = `dm_${sortedIds[0]}_${sortedIds[1]}`;
-      
-      // Store this standardized ID
-      formattedConversation.standardConversationId = standardConversationId;
-      
-      console.log(`Created standard conversation ID: ${standardConversationId}`);
+    if (!conversation) {
+      console.error('Cannot select undefined/null conversation');
+      return;
     }
     
-    // Set the active conversation and load messages
+    // Prevent rapid conversation switching - throttle to one switch per second
+    const now = Date.now();
+    if (now - lastSwitchTimeRef.current < 1000) {
+      console.log('Throttling direct message switch - too rapid');
+      return;
+    }
+    lastSwitchTimeRef.current = now;
+    
+    setMessages([]);
+    
+    let formattedConversation = conversation;
+    
+    // Standardize the conversation format
+    if (typeof conversation === 'string') {
+      formattedConversation = directConversations.find(c => c._id === conversation);
+      if (!formattedConversation) {
+        console.error('Could not find direct conversation with ID:', conversation);
+        return;
+      }
+    }
+    
+    // Ensure the conversation has a standardConversationId for room joining
+    if (!formattedConversation.standardConversationId && formattedConversation._id && user?._id) {
+      const otherUserId = formattedConversation.userId || formattedConversation._id;
+      const sortedIds = [user._id, otherUserId].sort();
+      formattedConversation.standardConversationId = `dm_${sortedIds[0]}_${sortedIds[1]}`;
+      console.log('Generated standardConversationId:', formattedConversation.standardConversationId);
+    }
+    
+    console.log('Selecting direct message conversation:', { 
+      id: formattedConversation._id,
+      userId: formattedConversation.userId,
+      standardConversationId: formattedConversation.standardConversationId,
+      username: formattedConversation.username
+    });
+    
+    // Setup conversation room joining based on standardConversationId
+    if (socket && formattedConversation.standardConversationId) {
+      if (previousRoomRef.current) {
+        const prevRoom = previousRoomRef.current.startsWith('channel_')
+          ? previousRoomRef.current
+          : `dm_${previousRoomRef.current}`;
+          
+        socket.emit('leave_room', prevRoom);
+        console.log(`Left room: ${prevRoom}`);
+      }
+      
+      // Join the direct message room using standardConversationId
+      const roomId = formattedConversation.standardConversationId;
+      socket.emit('join_room', roomId);
+      console.log(`Joined direct message room: ${roomId}`);
+      previousRoomRef.current = roomId;
+      
+      // Request room list for debugging
+      setTimeout(() => {
+        console.log("Checking rooms user has joined...");
+        socket.emit('getRooms');
+      }, 500);
+      
+      // Also join user-specific room for direct messages
+      if (formattedConversation.userId) {
+        const userSpecificRoom = formattedConversation.userId;
+        socket.emit('join_room', userSpecificRoom);
+        console.log(`Joined user-specific room: ${userSpecificRoom}`);
+      }
+    } else {
+      console.warn('Socket not available or missing standardConversationId for room joining');
+    }
+    
     setActiveConversation(formattedConversation);
     setConversationType('direct');
     
-    // First load the messages
-    loadMessages(formattedConversation, 'direct');
-    
-    // Then mark them as read (if loading was successful)
-    if (formattedConversation._id && unreadMessages[formattedConversation._id] > 0) {
-      // Add a slight delay to ensure messages are loaded first
-      setTimeout(() => {
-        markAsRead(formattedConversation._id);
-      }, 100);
-    }
+    // Delay loading messages slightly to avoid rapid concurrent requests
+    setTimeout(() => {
+      loadMessages(formattedConversation, 'direct');
+    }, 100);
     
     setShowUserList(false);
-    
-    // Log the active conversation for debugging
     console.log('Active conversation set to:', formattedConversation);
   };
   
   // Function to start a new direct message conversation
   const handleStartDirectMessage = async (user) => {
-    // Comprehensive check for existing conversations with this user
-    // This handles different ID formats and also checks username
     const existingConversation = directConversations.find(c => {
-      // Check direct ID match
-      if (c._id === user._id || c.userId === user._id) {
-        return true;
-      }
-      
-      // Check username match
-      if (c.username === user.username) {
-        return true;
-      }
-      
-      // Check for dm_ format conversation IDs
+      if (c._id === user._id || c.userId === user._id) return true;
+      if (c.username === user.username) return true;
       if (c._id && typeof c._id === 'string' && c._id.startsWith('dm_')) {
-        // Extract the user IDs from the dm_ format
         const parts = c._id.split('_');
-        if (parts.length === 3) {
-          // Check if either user ID matches our target
-          return parts[1] === user._id || parts[2] === user._id;
-        }
+        if (parts.length === 3) return parts[1] === user._id || parts[2] === user._id;
       }
-      
-      // Check other user ID fields
-      if (c.otherUser && c.otherUser._id === user._id) {
-        return true;
-      }
-      
+      if (c.otherUser && c.otherUser._id === user._id) return true;
       return false;
     });
     
     if (existingConversation) {
-      // If conversation exists, open it
       console.log('Opening existing conversation:', existingConversation);
       handleDirectMessageSelect(existingConversation);
     } else {
       try {
-        // If not, create a new one
         console.log('Creating new conversation with:', user.username);
         const conversation = await startDirectConversation(user._id);
         if (conversation) {
-          // Format conversation with required fields if they're missing
           const formattedConversation = {
             ...conversation,
             _id: conversation._id || user._id,
@@ -257,11 +290,7 @@ const MessagingHub = () => {
             profilePicture: user.profilePicture
           };
           handleDirectMessageSelect(formattedConversation);
-          
-          // Ensure open chats are visible
           setShowOpenChats(true);
-          
-          // Show success message
           toast.success(`Started conversation with ${user.username}`);
         } else {
           console.error("Failed to create conversation", user);
@@ -272,56 +301,27 @@ const MessagingHub = () => {
         toast.error("Failed to start conversation");
       }
     }
-    
-    // Always make sure Recent DMs is visible
     setShowUserList(false);
-  };
-  
-  // Function to handle creating a new channel (disabled as per requirements)
-  // eslint-disable-next-line no-unused-vars
-  const handleCreateChannel = async () => {
-    // This functionality has been disabled as per requirements
-    console.log('Channel creation is disabled');
-    
-    // Keep the original code commented out for future reference
-    /*
-    const channelName = prompt('Enter channel name:');
-    if (channelName && channelName.trim()) {
-      const channel = await createChannel(channelName);
-      if (channel) {
-        handleChannelSelect({
-          id: channel._id,
-          name: channel.name,
-          icon: channel.icon || '💬'
-        });
-      }
-    }
-    */
   };
   
   // Function to handle message input change
   const handleMessageInputChange = (e) => {
     setMessage(e.target.value);
     
-    // Clear previous typing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
     
-    // Only emit typing event if we have an active conversation
     if (connected && activeConversation) {
-      // Create appropriate channel ID based on conversation type
       const channelId = conversationType === 'channel' 
-        ? activeConversation.id
+        ? activeConversation.id || activeConversation.name
         : `${user._id}-${activeConversation._id}`;
         
-      // Emit typing event through socket context
       const socketPayload = {
         channel: channelId,
         username: user.username
       };
       
-      // This event will be handled by the SocketProvider
       window.dispatchEvent(new CustomEvent('socket:emit', {
         detail: {
           event: 'typing',
@@ -329,7 +329,6 @@ const MessagingHub = () => {
         }
       }));
       
-      // Set timeout to stop typing
       typingTimeoutRef.current = setTimeout(() => {
         window.dispatchEvent(new CustomEvent('socket:emit', {
           detail: {
@@ -362,47 +361,46 @@ const MessagingHub = () => {
   
   // Function to handle removing a conversation from the list
   const handleRemoveConversation = async (e, userId) => {
-    e.stopPropagation(); // Prevent opening the conversation when clicking the delete button
+    // Prevent the default button action
+    e.preventDefault();
+    // Stop the event from bubbling up to parent elements
+    e.stopPropagation();
     
-    if (window.confirm('Remove this conversation from your recent list? All messages will be deleted.')) {
-      try {
-        // Display loading toast
+    console.log('Removing conversation:', userId);
+    
+    // Use setTimeout to ensure the event is fully handled before showing the confirmation
+    // This prevents any parent handlers from accidentally being triggered
+    setTimeout(async () => {
+      if (window.confirm('Remove this conversation from your recent list? All messages will be deleted.')) {
         const loadingToastId = toast.loading('Removing conversation...');
-        
-        // Use the removeConversation function from ConversationContext
-        // This now handles the API call to delete messages on the backend
-        await removeConversation(userId);
-        
-        // If the active conversation is the one being removed, clear it
-        if (conversationType === 'direct' && activeConversation && activeConversation._id === userId) {
-          setActiveConversation(null);
-          setMessages([]); // Clear displayed messages
+        try {
+          await removeConversation(userId);
+          if (conversationType === 'direct' && activeConversation && activeConversation._id === userId) {
+            setActiveConversation(null);
+            setMessages([]);
+          }
+          toast.dismiss(loadingToastId);
+          toast.success('Conversation and messages removed successfully');
+        } catch (error) {
+          console.error('Error in handleRemoveConversation:', error);
+          toast.dismiss(loadingToastId);
+          toast.error('Failed to remove conversation completely');
         }
-        
-        // Dismiss loading toast and show success
-        toast.dismiss(loadingToastId);
-        toast.success('Conversation and messages removed successfully');
-      } catch (error) {
-        console.error('Error in handleRemoveConversation:', error);
-        toast.error('Failed to remove conversation completely');
       }
-    }
+    }, 0);
   };
   
   // Filter channels based on search term
   const getFilteredChannels = () => {
-    // Don't log on every render to avoid excessive console output
     if (channels.length > 0) {
       console.log(`Found ${channels.length} channels to filter`);
     }
     return channels
-      .filter(channel => {
-        // Remove the "genral" channel and filter by search term
-        return channel.name.toLowerCase() !== 'genral' && 
-               channel.name.toLowerCase().includes(searchTerm.toLowerCase());
-      })
+      .filter(channel => 
+        channel.name.toLowerCase() !== 'genral' && 
+        channel.name.toLowerCase().includes(searchTerm.toLowerCase())
+      )
       .sort((a, b) => {
-        // Sort by default channels first, then alphabetically
         if (a.isDefaultChannel && !b.isDefaultChannel) return -1;
         if (!a.isDefaultChannel && b.isDefaultChannel) return 1;
         return a.name.localeCompare(b.name);
@@ -410,23 +408,17 @@ const MessagingHub = () => {
   };
   
   const getFilteredDirectMessages = () => {
-    // First filter by search term
     const filtered = directConversations.filter(conversation => 
       conversation.username?.toLowerCase().includes(searchTerm.toLowerCase())
     );
-    
-    // Remove duplicates by username
     const uniqueConversations = [];
     const seenUsernames = new Set();
-    
     filtered.forEach(conversation => {
-      // Check if we've already seen this username
       if (conversation.username && !seenUsernames.has(conversation.username.toLowerCase())) {
         seenUsernames.add(conversation.username.toLowerCase());
         uniqueConversations.push(conversation);
       }
     });
-    
     return uniqueConversations;
   };
   
@@ -434,18 +426,23 @@ const MessagingHub = () => {
     user.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
-  // Format timestamp
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
   
-  // Check if a message was sent by the current user
   const isCurrentUser = (senderId) => {
-    return senderId === user._id;
+    if (!senderId || !user || !user._id) return false;
+    
+    // Compare as strings to handle both ObjectId and string comparisons
+    const currentUserId = user._id.toString();
+    const messageSenderId = senderId.toString();
+    
+    console.log(`[IS_CURRENT_USER] Comparing ${messageSenderId} with ${currentUserId}: ${messageSenderId === currentUserId}`);
+    
+    return messageSenderId === currentUserId;
   };
   
-  // Get profile picture URL
   const getProfilePicture = (profilePicture) => {
     if (!profilePicture) return null;
     return profilePicture.startsWith('http') 
@@ -453,7 +450,6 @@ const MessagingHub = () => {
       : `${API_BASE_URL.replace('/api', '')}${profilePicture}`;
   };
   
-  // Render sidebar toggle buttons
   const renderToggleButtons = () => {
     return (
       <div className="toggle-container">
@@ -473,13 +469,11 @@ const MessagingHub = () => {
     );
   };
   
-  // Render channels section
   const renderChannels = () => {
     return (
       <div className="channels-section">
         <div className="channels-header">
           <span>Channels</span>
-          {/* Removed the + button completely since users cannot create channels */}
         </div>
         <ul className="channels-list">
           {getFilteredChannels().map(channel => (
@@ -498,7 +492,6 @@ const MessagingHub = () => {
     );
   };
   
-  // Render direct messages section with online users
   const renderDirectMessages = () => {
     const onlineUsers = users.filter(u => u.status === 'online' && u._id !== user._id);
     
@@ -510,8 +503,6 @@ const MessagingHub = () => {
         {onlineUsers.length > 0 ? (
           <ul className="direct-messages-list">
             {onlineUsers.map(u => {
-              // Check if this user already has a conversation in the recent list
-              // to visually indicate it to the user
               const hasExistingConversation = directConversations.some(c => 
                 c._id === u._id || 
                 c.userId === u._id || 
@@ -519,7 +510,6 @@ const MessagingHub = () => {
                 (c._id && typeof c._id === 'string' && c._id.startsWith('dm_') && 
                   c._id.split('_').slice(1).includes(u._id))
               );
-                        
               return (
                 <li 
                   key={u._id} 
@@ -551,12 +541,9 @@ const MessagingHub = () => {
     );
   };
   
-  // Render recent DMs section (only showing conversations the user has actively started)
   const renderRecentDMs = () => {
-    // Only show if there are any recent DMs
     if (directConversations.length === 0) return null;
     
-    // Log to ensure we're rendering with the right data
     console.log('Rendering recent DMs with:', {
       directConversations: directConversations.map(c => ({ 
         _id: c._id, 
@@ -581,16 +568,12 @@ const MessagingHub = () => {
           <ul className="direct-messages-list">
             {getFilteredDirectMessages().length > 0 ? (
               getFilteredDirectMessages().map(conversation => {
-                // Check if this conversation is active
                 const isActive = conversationType === 'direct' && 
                                 activeConversation && 
                                 (activeConversation._id === conversation._id ||
                                  activeConversation.userId === conversation._id ||
                                  activeConversation._id === conversation.userId);
-                
-                // Make sure we have a user status, defaulting to offline if not set
                 const userStatus = conversation.status || 'offline';
-                
                 return (
                   <li 
                     key={conversation._id} 
@@ -614,6 +597,7 @@ const MessagingHub = () => {
                     <button 
                       className="remove-conversation-btn"
                       onClick={(e) => handleRemoveConversation(e, conversation._id)}
+                      onMouseDown={(e) => e.stopPropagation()}
                       title="Remove from recent conversations"
                     >
                       ×
@@ -639,10 +623,7 @@ const MessagingHub = () => {
     <div className="messaging-hub">
       <Navbar />
       <div className="messaging-container">
-        
-        {/* Sidebar */}
         <div className="sidebar">
-          {/* Search */}
           <div className="search-container">
             <input
               type="text"
@@ -652,20 +633,12 @@ const MessagingHub = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          
-          {/* Toggle between channels and direct messages */}
           {renderToggleButtons()}
-          
-          {/* Channel List */}
           {activeToggle === 'channels' && renderChannels()}
-          
-          {/* Direct Messages Section */}
           {activeToggle === 'messages' && (
             <>
               {renderDirectMessages()}
               {renderRecentDMs()}
-              
-              {/* Button to view all users (not just online ones) */}
               <div className="view-all-users-button-container">
                 <button 
                   className="view-all-users-button"
@@ -674,8 +647,6 @@ const MessagingHub = () => {
                   {showUserList ? 'Hide All Users' : 'View All Users'}
                 </button>
               </div>
-              
-              {/* User List for Starting New Conversations */}
               {showUserList && (
                 <div className="user-list-section">
                   <div className="channels-header">
@@ -692,8 +663,6 @@ const MessagingHub = () => {
                     {getFilteredUsers()
                       .filter(u => u._id !== user._id)
                       .map(u => {
-                        // Check if this user already has a conversation in the recent list
-                        // to visually indicate it to the user
                         const hasExistingConversation = directConversations.some(c => 
                           c._id === u._id || 
                           c.userId === u._id || 
@@ -701,29 +670,28 @@ const MessagingHub = () => {
                           (c._id && typeof c._id === 'string' && c._id.startsWith('dm_') && 
                             c._id.split('_').slice(1).includes(u._id))
                         );
-                        
                         return (
                           <li 
                             key={u._id} 
                             className={`dm-item ${hasExistingConversation ? 'existing-conversation' : ''}`}
                             onClick={() => handleStartDirectMessage(u)}
                           >
-                          <UserAvatar 
-                            profilePicture={getProfilePicture(u.profilePicture)}
-                            username={u.username}
-                            status={u.status}
-                            className="user-list-avatar"
-                          />
-                          <UserNameWithPreview
-                     userId={u._id}
-                     username={u.username}
-                     profilePicture={u.profilePicture}
-                     className="username"
-                   />
-                          {u.status === 'online' && (
-                            <span className="status-dot online"></span>
-                          )}
-                        </li>
+                            <UserAvatar 
+                              profilePicture={getProfilePicture(u.profilePicture)}
+                              username={u.username}
+                              status={u.status}
+                              className="user-list-avatar"
+                            />
+                            <UserNameWithPreview
+                              userId={u._id}
+                              username={u.username}
+                              profilePicture={u.profilePicture}
+                              className="username"
+                            />
+                            {u.status === 'online' && (
+                              <span className="status-dot online"></span>
+                            )}
+                          </li>
                         );
                       })
                     }
@@ -733,12 +701,9 @@ const MessagingHub = () => {
             </>
           )}
         </div>
-        
-        {/* Main Content */}
         <div className="main-content">
           {activeConversation ? (
             <>
-              {/* Chat Header */}
               <div className="chat-header">
                 <div className="chat-title">
                   {conversationType === 'channel' 
@@ -757,8 +722,6 @@ const MessagingHub = () => {
                   )}
                 </div>
               </div>
-              
-              {/* Messages Container */}
               <div className="messages-container" ref={messagesEndRef}>
                 {messagesLoading ? (
                   <div className="loading-messages">Loading messages...</div>
@@ -770,10 +733,7 @@ const MessagingHub = () => {
                       </div>
                     ) : (
                       messages.map(msg => {
-                        // Generate a stable unique key using tempId or _id
                         const messageKey = msg.tempId || msg._id;
-                        
-                        // Skip rendering if no valid key
                         if (!messageKey) {
                           console.error('[MESSAGE RENDER] Message missing ID:', {
                             content: msg.content?.substring(0, 20),
@@ -783,57 +743,51 @@ const MessagingHub = () => {
                           return null;
                         }
                         
-                        // Log message details for debugging
-                        console.log('[MESSAGE RENDER]', {
-                          key: messageKey,
-                          id: msg._id,
-                          tempId: msg.tempId,
-                          pending: msg.pending,
-                          sender: msg.sender?.username
-                        });
+                        // Determine if this is a sent or received message
+                        const isSentByCurrentUser = msg.sender && (
+                          isCurrentUser(msg.sender._id) || 
+                          (msg.sender.username && msg.sender.username === user.username)
+                        );
                         
                         return (
                           <div 
                             key={messageKey}
                             data-message-id={msg._id}
                             data-temp-id={msg.tempId}
-                            className={`message ${isCurrentUser(msg.sender?._id) ? 'sent' : 'received'} ${msg.isDeleted ? 'deleted' : ''} ${msg.pending ? 'pending' : ''}`}
+                            className={`message ${isSentByCurrentUser ? 'sent' : 'received'} ${msg.isDeleted ? 'deleted' : ''} ${msg.pending ? 'pending' : ''}`}
                           >
-                          <div className="message-avatar">
-                            <UserAvatar 
-                              profilePicture={getProfilePicture(msg.sender?.profilePicture)} 
-                              username={msg.sender?.username || 'Unknown'}
-                            />
-                          </div>
-                          <div className="message-content">
-                            <div className="message-header">
-                              {/* Log sender ID for debugging */}
-                              {console.log('Message sender ID:', msg.sender?._id)}
-                              <UserNameWithPreview
-                                userId={msg.sender?._id}
+                            <div className="message-avatar">
+                              <UserAvatar 
+                                profilePicture={getProfilePicture(msg.sender?.profilePicture)} 
                                 username={msg.sender?.username || 'Unknown'}
-                                profilePicture={msg.sender?.profilePicture}
-                                className="message-username"
-                                previewContext={UserNameWithPreview.PREVIEW_CONTEXT.MESSAGE}
                               />
-                              <span className="message-time">{formatTime(msg.timestamp)}</span>
                             </div>
-                            <div className="message-text">
-                              {msg.deleting ? 'Deleting...' : msg.content}
+                            <div className="message-content">
+                              <div className="message-header">
+                                <UserNameWithPreview
+                                  userId={msg.sender?._id}
+                                  username={msg.sender?.username || 'Unknown'}
+                                  profilePicture={msg.sender?.profilePicture}
+                                  className="message-username"
+                                  previewContext={UserNameWithPreview.PREVIEW_CONTEXT.MESSAGE}
+                                />
+                                <span className="message-time">{formatTime(msg.timestamp)}</span>
+                              </div>
+                              <div className="message-text">
+                                {msg.deleting ? 'Deleting...' : msg.content}
+                              </div>
+                              {isSentByCurrentUser && !msg.isDeleted && !msg.deleting && (
+                                <button 
+                                  className="delete-button" 
+                                  onClick={() => handleDeleteMessage(msg._id)}
+                                >
+                                  Delete
+                                </button>
+                              )}
                             </div>
-                            {isCurrentUser(msg.sender?._id) && !msg.isDeleted && !msg.deleting && (
-                              <button 
-                                className="delete-button" 
-                                onClick={() => handleDeleteMessage(msg._id)}
-                              >
-                                Delete
-                              </button>
-                            )}
                           </div>
-                        </div>
-                      );
-                    })
-                    .filter(Boolean) // Remove any null messages
+                        );
+                      }).filter(Boolean)
                     )}
                     {typing && (
                       <div className="typing-indicator">
@@ -844,8 +798,6 @@ const MessagingHub = () => {
                   </div>
                 )}
               </div>
-              
-              {/* Message Input */}
               <div className="message-input-container">
                 <form className="message-form" onSubmit={handleSendMessage}>
                   <textarea
