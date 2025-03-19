@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
@@ -26,9 +26,8 @@ const ProtectedRoute = ({ children }) => {
 
 const App = () => {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <Router>
+    <ThemeProvider>
+      <Router>
           <div className="app">
             <Routes>
               <Route path="/" element={<Home />} />
@@ -52,9 +51,8 @@ const App = () => {
               />
             </Routes>
           </div>
-        </Router>
-      </ThemeProvider>
-    </AuthProvider>
+      </Router>
+    </ThemeProvider>
   );
 };
 

@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useMessages } from '../context/MessageContext';
+import { useSocket } from '../context/SocketContext';
 import { SOCKET_URL } from '../config';
 import '../styles/DirectMessages.css';
 
-const DirectMessages = ({ socket }) => {
+const DirectMessages = () => {
+  const { socket } = useSocket();
   const { user, getFullProfilePictureUrl } = useAuth();
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -11,6 +14,7 @@ const DirectMessages = ({ socket }) => {
   const [messages, setMessages] = useState([]);
   const messagesEndRef = useRef(null);
 
+  // Fetch users and listen for user updates
   useEffect(() => {
     if (!socket || !user) return;
     
@@ -54,22 +58,50 @@ const DirectMessages = ({ socket }) => {
       }
     });
 
+    return () => {
+      socket.off('userUpdated');
+    };
+  }, [socket, user, getFullProfilePictureUrl, selectedUser]);
+
+  // Simple message handling for selected user - following the friend's pattern
+  useEffect(() => {
+    if (!socket || !selectedUser) return;
+
+    // Join DM room when selected user changes
+    socket.emit('joinDM', { userId: user._id, otherUserId: selectedUser._id });
+
+    // Load previous messages
     socket.on('previousDMs', (messages) => {
       setMessages(messages);
       setTimeout(scrollToBottom, 0);
     });
 
+    // Listen for new messages using friend's simplified pattern
     socket.on('newDirectMessage', (message) => {
-      setMessages((prev) => [...prev, message]);
-      scrollToBottom();
+      console.log("Received message via WebSocket:", message);
+      console.log("Current selected user ID:", selectedUser._id);
+      
+      // Only add message if it involves the selected user
+      const senderIsSelected = message.sender._id === selectedUser._id;
+      const receiverIsSelected = message.receiver._id === selectedUser._id;
+      
+      if (senderIsSelected || receiverIsSelected) {
+        setMessages((prev) => [...prev, message]);
+        scrollToBottom();
+      }
+    });
+    
+    // Handle message deletion
+    socket.on('messageDeleted', (messageId) => {
+      setMessages(prev => prev.filter(msg => msg._id !== messageId));
     });
 
     return () => {
-      socket.off('userUpdated');
       socket.off('previousDMs');
       socket.off('newDirectMessage');
+      socket.off('messageDeleted');
     };
-  }, [socket, user, getFullProfilePictureUrl, selectedUser]);
+  }, [socket, user, selectedUser]);
 
   useEffect(() => {
     scrollToBottom();
@@ -113,6 +145,18 @@ const DirectMessages = ({ socket }) => {
       console.error('Error sending message:', error);
     }
   };
+  
+  const { deleteMessage } = useMessages();
+  
+  const handleDeleteMessage = (messageId) => {
+    if (!messageId) return;
+    
+    try {
+      deleteMessage(messageId);
+    } catch (error) {
+      console.error('Error deleting message:', error);
+    }
+  };
 
   return (
     <div className="direct-messages">
@@ -126,37 +170,82 @@ const DirectMessages = ({ socket }) => {
         <div className="section-header">
           <h2>Private Messages</h2>
         </div>
-        {users.map((u) => (
-          <div
-            key={u._id}
-            className={`user-item ${selectedUser?._id === u._id ? 'active' : ''}`}
-            onClick={() => handleUserSelect(u)}
-          >
-            <div className="user-avatar">
-              {u.profilePicture ? (
-                <img 
-                  src={u.profilePicture} 
-                  alt={u.username}
-                  className="user-avatar-image"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`;
-                  }}
-                />
-              ) : (
-                <img 
-                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`}
-                  alt={u.username}
-                  className="user-avatar-image"
-                />
-              )}
+        
+        {/* Online Users */}
+        <div className="user-group-header">Online Users</div>
+        {users.filter(u => u.status === 'online' && u._id !== user._id).length > 0 ? (
+          users
+            .filter(u => u.status === 'online' && u._id !== user._id)
+            .map((u) => (
+              <div
+                key={u._id}
+                className={`user-item ${selectedUser?._id === u._id ? 'active' : ''}`}
+                onClick={() => handleUserSelect(u)}
+              >
+                <div className="user-avatar">
+                  {u.profilePicture ? (
+                    <img 
+                      src={u.profilePicture} 
+                      alt={u.username}
+                      className="user-avatar-image"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`;
+                      }}
+                    />
+                  ) : (
+                    <img 
+                      src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`}
+                      alt={u.username}
+                      className="user-avatar-image"
+                    />
+                  )}
+                </div>
+                <div className="user-info">
+                  <span className="user-name">{u.username}</span>
+                  <span className="user-status">{u.status || 'offline'}</span>
+                </div>
+              </div>
+            ))
+        ) : (
+          <div className="empty-group-message">No users online</div>
+        )}
+        
+        {/* Offline Users */}
+        <div className="user-group-header">Offline Users</div>
+        {users
+          .filter(u => u.status !== 'online' && u._id !== user._id)
+          .map((u) => (
+            <div
+              key={u._id}
+              className={`user-item ${selectedUser?._id === u._id ? 'active' : ''}`}
+              onClick={() => handleUserSelect(u)}
+            >
+              <div className="user-avatar">
+                {u.profilePicture ? (
+                  <img 
+                    src={u.profilePicture} 
+                    alt={u.username}
+                    className="user-avatar-image"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`;
+                    }}
+                  />
+                ) : (
+                  <img 
+                    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`}
+                    alt={u.username}
+                    className="user-avatar-image"
+                  />
+                )}
+              </div>
+              <div className="user-info">
+                <span className="user-name">{u.username}</span>
+                <span className="user-status">{u.status || 'offline'}</span>
+              </div>
             </div>
-            <div className="user-info">
-              <span className="user-name">{u.username}</span>
-              <span className="user-status">{u.status || 'offline'}</span>
-            </div>
-          </div>
-        ))}
+          ))}
       </div>
 
       <div className="chat-section">
@@ -172,10 +261,23 @@ const DirectMessages = ({ socket }) => {
               {messages.map((msg, index) => (
                 <div 
                   key={msg._id || index} 
-                  className={`message ${msg.sender._id === user._id ? 'sent' : 'received'}`}
+                  className={`message ${msg.sender._id === user._id ? 'sent' : 'received'} ${msg.isDeleted ? 'deleted' : ''} ${msg.deleting ? 'deleting' : ''}`}
                 >
                   <div className="message-content">
-                    <div className="message-text">{msg.content}</div>
+                    <div className="message-text-container">
+                      <div className="message-text">
+                        {msg.deleting ? 'Deleting...' : msg.content}
+                      </div>
+                      {msg.sender._id === user._id && !msg.isDeleted && !msg.deleting && (
+                        <button 
+                          className="delete-message-btn" 
+                          onClick={() => handleDeleteMessage(msg._id)}
+                          aria-label="Delete message"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                     <div className="message-time">
                       {new Date(msg.timestamp).toLocaleTimeString([], { 
                         hour: '2-digit', 

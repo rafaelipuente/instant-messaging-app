@@ -8,6 +8,7 @@
   --border-color: #e9ecef;
   --accent-color: #4f46e5;
   --accent-hover: #4338ca;
+  --accent-rgb: 79, 70, 229; /* RGB values for #4f46e5 */
   --message-sent: linear-gradient(to right, #60a5fa, #3b82f6);
   --message-received: linear-gradient(to right, #86efac, #4ade80);
   --message-sent-text: white;
@@ -29,6 +30,7 @@
   --border-color: #414868;
   --accent-color: #7aa2f7;
   --accent-hover: #89b4fa;
+  --accent-rgb: 122, 162, 247; /* RGB values for #7aa2f7 */
   --message-sent: linear-gradient(to right, #7aa2f7, #89b4fa);
   --message-received: linear-gradient(to right, #9ece6a, #73daca);
   --message-sent-text: #1a1b26;

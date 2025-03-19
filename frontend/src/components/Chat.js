@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import Navbar from './Navbar';
 import DirectMessages from './DirectMessages';
-import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
 import '../styles/Chat.css';
 
 const Chat = () => {
   const { user, getFullProfilePictureUrl } = useAuth();
+  const { socket } = useSocket();
   const [activeChannel, setActiveChannel] = useState('General');
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
-  const [socket, setSocket] = useState(null);
   const [typing, setTyping] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showDMs, setShowDMs] = useState(false);
@@ -26,56 +26,68 @@ const Chat = () => {
   ];
 
   useEffect(() => {
-    if (user && user.token) {
-      const newSocket = io(SOCKET_URL, {
-        auth: { token: user.token }
-      });
+    // Socket is now managed by SocketContext
+  }, []);
 
-      newSocket.on('connect', () => {
-        console.log('Socket connected');
-        setSocket(newSocket);
-      });
-
-      return () => {
-        if (newSocket) {
-          newSocket.disconnect();
-        }
-      };
-    }
-  }, [user]);
-
+  // Simple channel message handling - following friend's pattern
   useEffect(() => {
     if (socket && activeChannel) {
+      console.log("Joining channel:", activeChannel);
       socket.emit('join', { userId: user._id, channel: activeChannel });
 
+      // Load previous messages
       socket.on('previousMessages', (messages) => {
+        console.log("Received previous messages for channel:", activeChannel);
         setMessages(messages);
-        // Immediately scroll to bottom when messages are loaded
         setTimeout(scrollToBottom, 0);
-      });
-
-      socket.on('message', (message) => {
-        setMessages((prevMessages) => [...prevMessages, message]);
-      });
-
-      socket.on('userTyping', ({ username }) => {
-        if (username !== user.username) {
-          setTyping(username);
-        }
-      });
-
-      socket.on('userStopTyping', () => {
-        setTyping(null);
       });
 
       return () => {
         socket.off('previousMessages');
-        socket.off('message');
-        socket.off('userTyping');
-        socket.off('userStopTyping');
       };
     }
-  }, [socket, activeChannel, user._id, user.username]);
+  }, [socket, activeChannel, user._id]);
+  
+  // Handle new messages separately - following friend's pattern
+  useEffect(() => {
+    if (!socket || !activeChannel) return;
+    
+    // Listen for new messages in the channel
+    socket.on('message', (message) => {
+      console.log("Received message via WebSocket:", message);
+      console.log("Current channel:", activeChannel);
+      
+      // Only add messages for the current channel
+      if (message.channel === activeChannel) {
+        setMessages((prevMessages) => [...prevMessages, message]);
+        scrollToBottom();
+      }
+    });
+    
+    return () => {
+      socket.off('message');
+    };
+  }, [socket, activeChannel]);
+  
+  // Handle typing indicators separately
+  useEffect(() => {
+    if (!socket) return;
+    
+    socket.on('userTyping', ({ username }) => {
+      if (username !== user.username) {
+        setTyping(username);
+      }
+    });
+
+    socket.on('userStopTyping', () => {
+      setTyping(null);
+    });
+    
+    return () => {
+      socket.off('userTyping');
+      socket.off('userStopTyping');
+    };
+  }, [socket, user.username]);
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
@@ -180,7 +192,7 @@ const Chat = () => {
         </div>
 
         {showDMs ? (
-          <DirectMessages socket={socket} />
+          <DirectMessages />
         ) : (
           <div className="chat-main">
             <div className="chat-header">

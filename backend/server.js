@@ -19,7 +19,7 @@ const DirectMessage = require('./models/directMessageModel');
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: 'http://localhost:3000',
+    origin: ['http://localhost:3000', 'http://127.0.0.1:63498', 'http://127.0.0.1:60811'],
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -155,6 +155,67 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('Error in directMessage:', error);
       socket.emit('messageError', { error: 'Failed to send message' });
+    }
+  });
+
+  /**
+   * DELETE A MESSAGE
+   */
+  socket.on('deleteMessage', async ({ messageId }) => {
+    try {
+      // First check if it's a direct message
+      let message = await DirectMessage.findById(messageId);
+      let isDirect = true;
+      
+      // If not found, check if it's a channel message
+      if (!message) {
+        message = await Message.findById(messageId);
+        isDirect = false;
+      }
+
+      // If message not found at all, stop
+      if (!message) {
+        console.log(`Message with ID ${messageId} not found`);
+        socket.emit('error', { message: 'Message not found' });
+        return;
+      }
+
+      // Make sure the user is the sender
+      if (message.sender.toString() !== socket.userId) {
+        console.log(`User ${socket.userId} tried to delete message ${messageId} but is not the sender`);
+        socket.emit('error', { message: 'Unauthorized: You can only delete your own messages' });
+        return;
+      }
+
+      // Handle direct messages differently than channel messages
+      if (isDirect) {
+        // For direct messages, we need to notify both sender and receiver
+        const roomId = [message.sender.toString(), message.receiver.toString()].sort().join('-');
+        
+        // We don't physically delete the message, just mark it as deleted
+        message.isDeleted = true;
+        message.content = 'This message has been deleted';
+        await message.save();
+        
+        // Broadcast to the room that the message was deleted
+        io.to(roomId).emit('messageDeleted', messageId);
+        console.log(`Direct message ${messageId} marked as deleted and notified room ${roomId}`);
+      } else {
+        // For channel messages
+        const channel = message.channel;
+        
+        // Mark as deleted rather than physically deleting
+        message.isDeleted = true;
+        message.content = 'This message has been deleted';
+        await message.save();
+        
+        // Broadcast to the channel
+        io.to(channel).emit('messageDeleted', messageId);
+        console.log(`Channel message ${messageId} marked as deleted and notified channel ${channel}`);
+      }
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      socket.emit('error', { message: 'Failed to delete message' });
     }
   });
 
