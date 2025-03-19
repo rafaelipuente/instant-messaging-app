@@ -13,6 +13,10 @@ const DirectMessages = () => {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const messagesEndRef = useRef(null);
+  const [showOnlineUsers, setShowOnlineUsers] = useState(true);
+  const [showOfflineUsers, setShowOfflineUsers] = useState(true);
+  const [showConversations, setShowConversations] = useState(true);
+  const [recentConversations, setRecentConversations] = useState([]);
 
   // Fetch users and listen for user updates
   useEffect(() => {
@@ -113,15 +117,7 @@ const DirectMessages = () => {
     }
   };
 
-  const handleUserSelect = (selectedUser) => {
-    if (selectedUser._id === user._id) {
-      console.warn('Cannot message yourself');
-      return;
-    }
-    setSelectedUser(selectedUser);
-    setMessages([]); // Clear messages when switching users
-    socket.emit('joinDM', { userId: user._id, otherUserId: selectedUser._id });
-  };
+
 
   const handleBack = () => {
     window.location.href = '/chat';
@@ -158,6 +154,39 @@ const DirectMessages = () => {
     }
   };
 
+  // Add a user to recent conversations when selected
+  const handleUserSelect = (selectedUser) => {
+    if (selectedUser._id === user._id) {
+      console.warn('Cannot message yourself');
+      return;
+    }
+    
+    setSelectedUser(selectedUser);
+    setMessages([]); // Clear messages when switching users
+    socket.emit('joinDM', { userId: user._id, otherUserId: selectedUser._id });
+    
+    // Add to recent conversations if not already there
+    setRecentConversations(prev => {
+      const exists = prev.some(conv => conv._id === selectedUser._id);
+      if (!exists) {
+        return [selectedUser, ...prev.slice(0, 4)]; // Keep only the 5 most recent conversations
+      }
+      return prev;
+    });
+  };
+  
+  // Remove a conversation from the recent list
+  const removeConversation = (e, conversationId) => {
+    e.stopPropagation(); // Prevent triggering the conversation selection
+    setRecentConversations(prev => prev.filter(conv => conv._id !== conversationId));
+    
+    // If the currently selected conversation is removed, clear the selection
+    if (selectedUser && selectedUser._id === conversationId) {
+      setSelectedUser(null);
+      setMessages([]);
+    }
+  };
+
   return (
     <div className="direct-messages">
       <div className="users-list">
@@ -171,12 +200,18 @@ const DirectMessages = () => {
           <h2>Private Messages</h2>
         </div>
         
-        {/* Online Users */}
-        <div className="user-group-header">Online Users</div>
-        {users.filter(u => u.status === 'online' && u._id !== user._id).length > 0 ? (
-          users
-            .filter(u => u.status === 'online' && u._id !== user._id)
-            .map((u) => (
+        {/* Recent Conversations */}
+        <div 
+          className="user-group-header clickable" 
+          onClick={() => setShowConversations(!showConversations)}
+        >
+          <span>Recent Conversations</span>
+          <span className="toggle-icon">{showConversations ? '−' : '+'}</span>
+        </div>
+        
+        {showConversations && recentConversations.length > 0 ? (
+          <div className="user-group">
+            {recentConversations.map((u) => (
               <div
                 key={u._id}
                 className={`user-item ${selectedUser?._id === u._id ? 'active' : ''}`}
@@ -205,47 +240,123 @@ const DirectMessages = () => {
                   <span className="user-name">{u.username}</span>
                   <span className="user-status">{u.status || 'offline'}</span>
                 </div>
+                <button 
+                  className="remove-conversation-btn" 
+                  onClick={(e) => removeConversation(e, u._id)}
+                  title="Remove from recent conversations"
+                >
+                  ×
+                </button>
               </div>
-            ))
-        ) : (
+            ))}
+          </div>
+        ) : showConversations && (
+          <div className="empty-group-message">No recent conversations</div>
+        )}
+        
+        {/* Online Users */}
+        <div 
+          className="user-group-header clickable" 
+          onClick={() => setShowOnlineUsers(!showOnlineUsers)}
+        >
+          <span>Online Users</span>
+          <span className="toggle-icon">{showOnlineUsers ? '−' : '+'}</span>
+        </div>
+        
+        {showOnlineUsers && users.filter(u => u.status === 'online' && u._id !== user._id).length > 0 ? (
+          <div className="user-group">
+            {users
+              .filter(u => u.status === 'online' && u._id !== user._id)
+              .map((u) => (
+                <div
+                  key={u._id}
+                  className={`user-item ${selectedUser?._id === u._id ? 'active' : ''}`}
+                  onClick={() => handleUserSelect(u)}
+                >
+                  <div className="user-avatar">
+                    {u.profilePicture ? (
+                      <img 
+                        src={u.profilePicture} 
+                        alt={u.username}
+                        className="user-avatar-image"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`;
+                        }}
+                      />
+                    ) : (
+                      <img 
+                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`}
+                        alt={u.username}
+                        className="user-avatar-image"
+                      />
+                    )}
+                  </div>
+                  <div className="user-info">
+                    <span className="user-name">{u.username}</span>
+                    <span className="user-status">{u.status || 'offline'}</span>
+                  </div>
+                </div>
+              ))}
+          </div>
+        ) : showOnlineUsers && (
           <div className="empty-group-message">No users online</div>
         )}
         
         {/* Offline Users */}
-        <div className="user-group-header">Offline Users</div>
-        {users
-          .filter(u => u.status !== 'online' && u._id !== user._id)
-          .map((u) => (
-            <div
-              key={u._id}
-              className={`user-item ${selectedUser?._id === u._id ? 'active' : ''}`}
-              onClick={() => handleUserSelect(u)}
-            >
-              <div className="user-avatar">
-                {u.profilePicture ? (
-                  <img 
-                    src={u.profilePicture} 
-                    alt={u.username}
-                    className="user-avatar-image"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`;
-                    }}
-                  />
-                ) : (
-                  <img 
-                    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`}
-                    alt={u.username}
-                    className="user-avatar-image"
-                  />
-                )}
-              </div>
-              <div className="user-info">
-                <span className="user-name">{u.username}</span>
-                <span className="user-status">{u.status || 'offline'}</span>
-              </div>
-            </div>
-          ))}
+        <div 
+          className="user-group-header clickable" 
+          onClick={() => setShowOfflineUsers(!showOfflineUsers)}
+        >
+          <span>Offline Users</span>
+          <span className="toggle-icon">{showOfflineUsers ? '−' : '+'}</span>
+        </div>
+        
+        {showOfflineUsers && users.filter(u => u.status !== 'online' && u._id !== user._id).length > 0 ? (
+          <div className="user-group">
+            {users
+              .filter(u => u.status !== 'online' && u._id !== user._id)
+              .map((u) => (
+                <div
+                  key={u._id}
+                  className={`user-item ${selectedUser?._id === u._id ? 'active' : ''}`}
+                  onClick={() => handleUserSelect(u)}
+                >
+                  <div className="user-avatar">
+                    {u.profilePicture ? (
+                      <img 
+                        src={u.profilePicture} 
+                        alt={u.username}
+                        className="user-avatar-image"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`;
+                        }}
+                      />
+                    ) : (
+                      <img 
+                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random&color=fff&size=128`}
+                        alt={u.username}
+                        className="user-avatar-image"
+                      />
+                    )}
+                  </div>
+                  <div className="user-info">
+                    <span className="user-name">{u.username}</span>
+                    <span className="user-status">{u.status || 'offline'}</span>
+                  </div>
+                </div>
+              ))}
+          </div>
+        ) : showOfflineUsers && (
+          <div className="empty-group-message">No offline users</div>
+        )}
+        
+        {selectedUser && (
+          <button className="clear-selection-button" onClick={() => setSelectedUser(null)}>
+            Clear Selection
+          </button>
+        )}
       </div>
 
       <div className="chat-section">

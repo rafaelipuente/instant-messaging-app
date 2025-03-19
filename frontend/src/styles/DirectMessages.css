@@ -367,6 +367,29 @@
   cursor: pointer;
   transition: background-color 0.2s ease;
   border-bottom: 1px solid var(--border-color);
+  position: relative;
+}
+
+.remove-conversation-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 50%;
+  visibility: hidden;
+  margin-left: auto;
+  line-height: 1;
+}
+
+.user-item:hover .remove-conversation-btn {
+  visibility: visible;
+}
+
+.remove-conversation-btn:hover {
+  background-color: rgba(229, 62, 62, 0.1);
+  color: #e53e3e;
 }
 
 .dark-mode .user-item {
@@ -509,6 +532,28 @@
   background-color: var(--bg-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.user-group-header.clickable {
+  cursor: pointer;
+}
+
+.user-group-header.clickable:hover {
+  background-color: var(--bg-hover, #e2e8f0);
+}
+
+.toggle-icon {
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.user-group {
+  max-height: 300px;
+  overflow-y: auto;
+  transition: max-height 0.3s ease;
 }
 
 .dark-mode .user-group-header {

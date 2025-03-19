@@ -118,6 +118,4 @@ The application will open in your browser at http://localhost:3000
 - Ensure your browser supports WebSockets for real-time functionality
 - Clear your browser cache if you experience unexpected behavior
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+# EXTRAS 
