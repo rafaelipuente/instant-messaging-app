@@ -16,9 +16,26 @@ const DirectMessages = () => {
   const [showOnlineUsers, setShowOnlineUsers] = useState(true);
   const [showOfflineUsers, setShowOfflineUsers] = useState(true);
   const [showConversations, setShowConversations] = useState(true);
-  const [recentConversations, setRecentConversations] = useState([]);
+  const [recentConversations, setRecentConversations] = useState(() => {
+    const savedConversations = localStorage.getItem('recentConversations');
+    return savedConversations ? JSON.parse(savedConversations) : [];
+  });
 
   // Fetch users and listen for user updates
+  // Update profilePicture URLs in recentConversations when user data is loaded
+  useEffect(() => {
+    if (recentConversations.length > 0 && user) {
+      // Update profile pictures with full URLs if needed
+      const updatedConversations = recentConversations.map(conv => ({
+        ...conv,
+        profilePicture: getFullProfilePictureUrl(conv.profilePicture)
+      }));
+      
+      setRecentConversations(updatedConversations);
+      localStorage.setItem('recentConversations', JSON.stringify(updatedConversations));
+    }
+  }, [user, getFullProfilePictureUrl]);
+
   useEffect(() => {
     if (!socket || !user) return;
     
@@ -169,7 +186,9 @@ const DirectMessages = () => {
     setRecentConversations(prev => {
       const exists = prev.some(conv => conv._id === selectedUser._id);
       if (!exists) {
-        return [selectedUser, ...prev.slice(0, 4)]; // Keep only the 5 most recent conversations
+        const updatedConversations = [selectedUser, ...prev.slice(0, 4)]; // Keep only the 5 most recent conversations
+        localStorage.setItem('recentConversations', JSON.stringify(updatedConversations));
+        return updatedConversations;
       }
       return prev;
     });
@@ -178,7 +197,11 @@ const DirectMessages = () => {
   // Remove a conversation from the recent list
   const removeConversation = (e, conversationId) => {
     e.stopPropagation(); // Prevent triggering the conversation selection
-    setRecentConversations(prev => prev.filter(conv => conv._id !== conversationId));
+    setRecentConversations(prev => {
+      const updatedConversations = prev.filter(conv => conv._id !== conversationId);
+      localStorage.setItem('recentConversations', JSON.stringify(updatedConversations));
+      return updatedConversations;
+    });
     
     // If the currently selected conversation is removed, clear the selection
     if (selectedUser && selectedUser._id === conversationId) {
@@ -210,7 +233,7 @@ const DirectMessages = () => {
         </div>
         
         {showConversations && recentConversations.length > 0 ? (
-          <div className="user-group">
+          <div className="user-group" data-component-name="DirectMessages">
             {recentConversations.map((u) => (
               <div
                 key={u._id}
@@ -251,7 +274,7 @@ const DirectMessages = () => {
             ))}
           </div>
         ) : showConversations && (
-          <div className="empty-group-message">No recent conversations</div>
+          <div className="empty-group-message" data-component-name="DirectMessages">No recent conversations</div>
         )}
         
         {/* Online Users */}

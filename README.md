@@ -118,4 +118,5 @@ The application will open in your browser at http://localhost:3000
 - Ensure your browser supports WebSockets for real-time functionality
 - Clear your browser cache if you experience unexpected behavior
 
-# EXTRAS 
+# my other version (runs the same way - Warning very buggy ( does have extra features))
+- https://github.com/rafaelipuente/instant-messaging-app/tree/feature/message-deletion-fix

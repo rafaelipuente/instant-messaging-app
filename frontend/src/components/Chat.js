@@ -206,22 +206,45 @@ const Chat = () => {
                   className={`message ${msg.sender.username === user.username ? 'sent' : 'received'}`}
                 >
                   <div className="message-wrapper">
-                    <div className="message-header">
-                      <span 
-                        className="message-sender"
-                        onClick={() => handleUserClick(msg.sender)}
-                      >
-                        {msg.sender.name || msg.sender.username}
-                      </span>
-                      <span className="message-time">
-                        {new Date(msg.timestamp).toLocaleTimeString([], { 
-                          hour: '2-digit', 
-                          minute: '2-digit',
-                          hour12: true 
-                        })}
-                      </span>
+                    <div className="message-avatar">
+                      {msg.sender.profilePicture ? (
+                        <img 
+                          src={msg.sender.profilePicture} 
+                          alt={msg.sender.username}
+                          className="avatar-image"
+                          onClick={() => handleUserClick(msg.sender)}
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.sender.username)}&background=random&color=fff&size=128`;
+                          }}
+                        />
+                      ) : (
+                        <img 
+                          src={`https://ui-avatars.com/api/?name=${encodeURIComponent(msg.sender.username)}&background=random&color=fff&size=128`}
+                          alt={msg.sender.username}
+                          className="avatar-image"
+                          onClick={() => handleUserClick(msg.sender)}
+                        />
+                      )}
                     </div>
-                    <div className="message-content">{msg.content}</div>
+                    <div className="message-content-wrapper">
+                      <div className="message-header">
+                        <span 
+                          className="message-sender"
+                          onClick={() => handleUserClick(msg.sender)}
+                        >
+                          {msg.sender.name || msg.sender.username}
+                        </span>
+                        <span className="message-time">
+                          {new Date(msg.timestamp).toLocaleTimeString([], { 
+                            hour: '2-digit', 
+                            minute: '2-digit',
+                            hour12: true 
+                          })}
+                        </span>
+                      </div>
+                      <div className="message-content">{msg.content}</div>
+                    </div>
                   </div>
                 </div>
               ))}
