@@ -43,6 +43,10 @@ body {
   display: flex;
   flex-direction: column;
   padding-top: 64px; /* Height of the navbar */
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
 }
 
 .app-header {

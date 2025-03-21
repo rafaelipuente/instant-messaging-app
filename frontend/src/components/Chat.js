@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useMessages } from '../context/MessageContext';
 import Navbar from './Navbar';
 import DirectMessages from './DirectMessages';
 import { SOCKET_URL } from '../config';
@@ -9,6 +10,7 @@ import '../styles/Chat.css';
 const Chat = () => {
   const { user, getFullProfilePictureUrl } = useAuth();
   const { socket } = useSocket();
+  const { deleteMessage } = useMessages();
   const [activeChannel, setActiveChannel] = useState('General');
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
@@ -42,8 +44,15 @@ const Chat = () => {
         setTimeout(scrollToBottom, 0);
       });
 
+      // Listen for message deletions
+      socket.on('messageDeleted', (messageId) => {
+        console.log('Message deleted from channel:', messageId);
+        setMessages(prev => prev.filter(msg => msg._id !== messageId));
+      });
+
       return () => {
         socket.off('previousMessages');
+        socket.off('messageDeleted');
       };
     }
   }, [socket, activeChannel, user._id]);
@@ -162,6 +171,26 @@ const Chat = () => {
     setSelectedUser(null);
   };
 
+  const handleDeleteMessage = (messageId) => {
+    if (!messageId) return;
+    
+    try {
+      // Optimistic UI update
+      setMessages(prev => prev.map(msg => 
+        msg._id === messageId ? { ...msg, deleting: true } : msg
+      ));
+      
+      // Send delete request to server
+      deleteMessage(messageId);
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      // Revert deleting state
+      setMessages(prev => prev.map(msg => 
+        msg._id === messageId ? { ...msg, deleting: false } : msg
+      ));
+    }
+  };
+
   return (
     <div className="chat-container">
       <Navbar />
@@ -243,7 +272,21 @@ const Chat = () => {
                           })}
                         </span>
                       </div>
-                      <div className="message-content">{msg.content}</div>
+                      <div className="message-content">
+                        {msg.deleting ? 'Deleting...' : msg.content}
+                        {msg.sender.username === user.username && !msg.isDeleted && !msg.deleting && (
+                          <button 
+                            className="delete-message-btn" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteMessage(msg._id);
+                            }}
+                            aria-label="Delete message"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

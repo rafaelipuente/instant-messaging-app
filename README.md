@@ -118,5 +118,46 @@ The application will open in your browser at http://localhost:3000
 - Ensure your browser supports WebSockets for real-time functionality
 - Clear your browser cache if you experience unexpected behavior
 
-# my other version (runs the same way - Warning very buggy ( does have extra features))
-- https://github.com/rafaelipuente/instant-messaging-app/tree/feature/message-deletion-fix
+## Running Tests
+
+The application uses Jest as the testing framework for both frontend and backend.
+
+### Backend Tests
+
+To run backend tests:
+
+```bash
+cd backend
+npm test
+```
+
+This will run all tests in the `__tests__` directory, including:
+- Unit tests for user authentication (registration and login)
+- Integration tests for message deletion functionality
+- Utility tests for database operations
+
+### Frontend Tests
+
+To run frontend tests:
+
+```bash
+cd frontend
+npm test
+```
+
+This will run React component tests using React Testing Library.
+
+### Test Coverage
+
+To generate test coverage reports:
+
+```bash
+cd backend
+npm test -- --coverage
+```
+
+This will show you how much of your codebase is covered by tests.
+
+## Alternative Version
+
+- https://github.com/rafaelipuente/instant-messaging-app/tree/feature/message-deletion-fix (Warning: may contain experimental features and bugs)

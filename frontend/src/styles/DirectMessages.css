@@ -47,6 +47,9 @@
   bottom: 0;
   display: flex;
   background-color: var(--bg-primary);
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .direct-messages-container {
@@ -105,19 +108,27 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
   min-width: 32px;
   margin-right: 0.5rem;
+  position: relative;
+  overflow: hidden;
 }
 
 .back-button:hover {
   background-color: var(--bg-hover);
+  transform: translateY(-1px);
+}
+
+.back-button:hover svg {
+  transform: translateX(-2px);
 }
 
 .back-button svg {
   width: 24px;
   height: 24px;
   stroke: currentColor;
+  transition: transform 0.2s ease;
 }
 
 .section-header h2 {
@@ -158,6 +169,8 @@
   align-items: center;
   gap: 1rem;
   min-height: 64px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.05), transparent);
 }
 
 .dark-mode .chat-header {
@@ -299,6 +312,9 @@
   gap: 1rem;
   align-items: center;
   min-height: 76px;
+  position: relative;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.03);
+  background-image: linear-gradient(to top, rgba(255, 255, 255, 0.02), transparent);
 }
 
 .dark-mode .message-input-container {
@@ -365,9 +381,18 @@
   align-items: center;
   gap: 0.875rem;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
   border-bottom: 1px solid var(--border-color);
   position: relative;
+  border-radius: 6px;
+  margin: 0 0.5rem 0.25rem 0.5rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.user-item:hover {
+  transform: translateY(-1px);
+  background-color: var(--bg-hover);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.05);
 }
 
 .remove-conversation-btn {
@@ -535,6 +560,10 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  border-radius: 6px;
+  margin: 0.5rem 0.5rem 0.25rem 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background-image: linear-gradient(to right, rgba(var(--accent-rgb), 0.05), transparent);
 }
 
 .user-group-header.clickable {
@@ -574,14 +603,18 @@
   display: flex;
   align-items: center;
   padding: 0.75rem;
-  border-radius: 0.5rem;
+  border-radius: 0.75rem;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
   background-color: var(--bg-secondary);
+  margin: 0 0.5rem 0.25rem 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .conversation-item:hover {
   background-color: var(--bg-tertiary);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
 }
 
 .conversation-item.active {
